@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QApplication, QScrollArea, QSlider
 )
 from PySide6.QtCore import Qt, Slot, QTimer, QFileSystemWatcher
+from PySide6.QtGui import QColor
 from core.bilibili_ws import BilibiliWSClient, BilibiliWSThread
 from core.edge_tts import EdgeTTS
 from core.sound_manager import SoundManager
@@ -42,8 +43,8 @@ class MainWindow(QMainWindow):
         self.guard_count = 0
         self.session_records = []
 
-        self.setWindowTitle("Bilibili Pixel Danmaku (莫兰迪像素风弹幕助手)")
-        self.resize(960, 660)
+        self.setWindowTitle("Pixel Danmaku · 像素弹幕助手")
+        self.resize(1020, 680)
 
         self.init_ui()
         self.load_config_into_ui()
@@ -66,13 +67,14 @@ class MainWindow(QMainWindow):
         try:
             self.colors = load_morandi_colors()
             qss = get_pixel_qss()
-            QApplication.instance().setStyleSheet(qss)
+            app = QApplication.instance()
+            if isinstance(app, QApplication):
+                app.setStyleSheet(qss)
             self.status_bar.showMessage("已自动同步全局 Morandi 壁纸主题配色")
-            self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c4ba97')}; font-weight: bold;")
             if self.ws_client and self.ws_client.is_running:
                 self.status_badge.set_badge("[ 状态: 已连接 ]", bg_color=self.colors.get('accent_green', '#8ea382'), text_color=self.colors.get('bg_dark', '#1c1b18'))
             else:
-                self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2a2924'), text_color=self.colors.get('text_dim', '#949289'))
+                self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#383732'), text_color=self.colors.get('text_dim', '#dededd'))
         except Exception as e:
             print(f"[Theme] Reload failed: {e}")
 
@@ -86,53 +88,69 @@ class MainWindow(QMainWindow):
         # Top Header Card (Controls + Metrics)
         top_card = PixelCard()
         top_layout = QVBoxLayout(top_card)
-        top_layout.setContentsMargins(10, 8, 10, 8)
+        top_layout.setContentsMargins(12, 8, 12, 10)
         top_layout.setSpacing(8)
+
+        # Row 0: App Title Bar + Live Status
+        r0_layout = QHBoxLayout()
+        r0_layout.setSpacing(8)
+
+        title_label = QLabel("▚ PIXEL · DANMAKU")
+        title_label.setStyleSheet(f"color: {self.colors.get('primary', '#afac9c')}; font-weight: bold; font-size: 13px; letter-spacing: 1px;")
+        r0_layout.addWidget(title_label)
+
+        sub_label = QLabel("莫兰迪像素风弹幕助手")
+        sub_label.setStyleSheet(f"color: {self.colors.get('text_dim', '#dededd')}; font-size: 10px; margin-left: 4px;")
+        r0_layout.addWidget(sub_label)
+
+        r0_layout.addStretch()
+
+        self.status_badge = PixelBadge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#383732'), text_color=self.colors.get('text_dim', '#dededd'))
+        r0_layout.addWidget(self.status_badge)
+
+        self.pop_label = PixelBadge("人气 0", accent_color=self.colors.get('accent_gold', '#bdb79a'))
+        r0_layout.addWidget(self.pop_label)
+        top_layout.addLayout(r0_layout)
 
         # Row 1: Connection & Main Controls
         r1_layout = QHBoxLayout()
         r1_layout.setSpacing(10)
 
-        lbl_room = QLabel("直播间号:")
-        lbl_room.setStyleSheet(f"font-weight: bold; color: {self.colors.get('primary', '#b8b39f')};")
-        
+        lbl_room = QLabel("直播间")
+        lbl_room.setStyleSheet(f"font-weight: bold; color: {self.colors.get('primary', '#afac9c')};")
+
         self.room_input = QLineEdit()
         self.room_input.setPlaceholderText("房间号, 如: 544853")
-        self.room_input.setMaximumWidth(140)
+        self.room_input.setMaximumWidth(150)
         self.room_input.returnPressed.connect(self.toggle_connection)
 
         self.connect_btn = QPushButton("连接直播间")
+        self.connect_btn.setObjectName("connect_btn")
         self.connect_btn.clicked.connect(self.toggle_connection)
 
-        self.status_badge = PixelBadge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2a2924'), text_color=self.colors.get('text_dim', '#949289'))
-        self.pop_label = QLabel("人气: 0")
-        self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c4ba97')}; font-weight: bold;")
-
-        btn_export = QPushButton("[ 导出记录 ]")
+        btn_export = QPushButton("导出记录")
         btn_export.clicked.connect(self.export_session_data)
 
-        btn_settings = QPushButton("[ 设置 ]")
+        btn_settings = QPushButton("设置")
         btn_settings.clicked.connect(self.open_settings)
 
         r1_layout.addWidget(lbl_room)
         r1_layout.addWidget(self.room_input)
         r1_layout.addWidget(self.connect_btn)
-        r1_layout.addWidget(self.status_badge)
         r1_layout.addStretch()
-        r1_layout.addWidget(self.pop_label)
         r1_layout.addWidget(btn_export)
         r1_layout.addWidget(btn_settings)
         top_layout.addLayout(r1_layout)
 
-        # Row 2: Live Analytics HUD Bar
+        # Row 2: Live Analytics HUD Bar (色条统计徽章)
         r2_layout = QHBoxLayout()
         r2_layout.setSpacing(8)
 
-        self.badge_duration = PixelBadge("[ 时长: 00:00:00 ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('text_dim', '#949289'))
-        self.badge_dm_stat = PixelBadge("[ 弹幕: 0 条 ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('text', '#dedcd2'))
-        self.badge_gift_stat = PixelBadge("[ 礼物: 0 (¥0.0) ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('accent_gold', '#c4ba97'))
-        self.badge_sc_stat = PixelBadge("[ SC: ¥0.0 ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('accent_rose', '#c47079'))
-        self.badge_guard_stat = PixelBadge("[ 舰队: 0 舰 ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('accent_purple', '#a292ad'))
+        self.badge_duration = PixelBadge("时长 00:00:00", accent_color=self.colors.get('text_dim', '#dededd'))
+        self.badge_dm_stat = PixelBadge("弹幕 0 条", accent_color=self.colors.get('primary', '#afac9c'))
+        self.badge_gift_stat = PixelBadge("礼物 0 (¥0.0)", accent_color=self.colors.get('accent_gold', '#bdb79a'))
+        self.badge_sc_stat = PixelBadge("SC ¥0.0", accent_color=self.colors.get('accent_rose', '#b24355'))
+        self.badge_guard_stat = PixelBadge("舰队 0 舰", accent_color=self.colors.get('accent_purple', '#a899b9'))
 
         r2_layout.addWidget(self.badge_duration)
         r2_layout.addWidget(self.badge_dm_stat)
@@ -145,7 +163,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(top_card)
 
         # Center Splitter
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(6)
 
         # Left: Danmaku Realtime Feed List
@@ -155,8 +173,8 @@ class MainWindow(QMainWindow):
         left_layout.setSpacing(6)
 
         feed_title_box = QHBoxLayout()
-        feed_title = QLabel("实时弹幕数据流")
-        feed_title.setStyleSheet(f"font-weight: bold; color: {self.colors.get('primary', '#b8b39f')};")
+        feed_title = QLabel("▌ 实时弹幕数据流")
+        feed_title.setStyleSheet(f"font-weight: bold; color: {self.colors.get('primary', '#afac9c')}; font-size: 12px;")
         self.btn_clear = QPushButton("清屏")
         self.btn_clear.clicked.connect(self.clear_feed)
         feed_title_box.addWidget(feed_title)
@@ -185,8 +203,8 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(8, 8, 8, 8)
         right_layout.setSpacing(8)
 
-        right_title = QLabel("控制中心与贵宾区")
-        right_title.setStyleSheet(f"font-weight: bold; color: {self.colors.get('primary', '#b8b39f')};")
+        right_title = QLabel("▌ 控制中心与贵宾区")
+        right_title.setStyleSheet(f"font-weight: bold; color: {self.colors.get('primary', '#afac9c')}; font-size: 12px;")
         right_layout.addWidget(right_title)
 
         # Quick Toggle Switch Buttons
@@ -212,22 +230,22 @@ class MainWindow(QMainWindow):
 
         # Master volume slider
         vol_box = QHBoxLayout()
-        lbl_vol_icon = QLabel("音量:")
-        lbl_vol_icon.setStyleSheet(f"color: {self.colors.get('text_dim', '#949289')};")
-        self.slider_quick_vol = QSlider(Qt.Horizontal)
+        lbl_vol_icon = QLabel("音量")
+        lbl_vol_icon.setStyleSheet(f"color: {self.colors.get('text_dim', '#dededd')};")
+        self.slider_quick_vol = QSlider(Qt.Orientation.Horizontal)
         self.slider_quick_vol.setRange(0, 100)
         self.slider_quick_vol.valueChanged.connect(self.on_quick_vol_changed)
         self.lbl_quick_vol = QLabel("80%")
         self.lbl_quick_vol.setFixedWidth(36)
-        self.lbl_quick_vol.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c4ba97')}; font-weight: bold;")
+        self.lbl_quick_vol.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-weight: bold;")
         vol_box.addWidget(lbl_vol_icon)
         vol_box.addWidget(self.slider_quick_vol)
         vol_box.addWidget(self.lbl_quick_vol)
         right_layout.addLayout(vol_box)
 
         # VIP Gift / Superchat feed
-        lbl_vip = QLabel("高能榜与醒目留言:")
-        lbl_vip.setStyleSheet(f"font-weight: bold; color: {self.colors.get('accent_gold', '#c4ba97')}; margin-top: 4px;")
+        lbl_vip = QLabel("▌ 高能榜与醒目留言")
+        lbl_vip.setStyleSheet(f"font-weight: bold; color: {self.colors.get('accent_gold', '#bdb79a')}; margin-top: 4px;")
         right_layout.addWidget(lbl_vip)
 
         self.vip_list = QListWidget()
@@ -277,12 +295,16 @@ class MainWindow(QMainWindow):
         self.sound_manager.set_master_volume(master_vol)
 
     def update_live_timer(self):
-        if self.session_start_time:
-            elapsed = int(time.time() - self.session_start_time)
+        start = self.session_start_time
+        if start is not None:
+            try:
+                elapsed = int(time.time() - start)
+            except (ValueError, TypeError):
+                elapsed = 0
             hrs = elapsed // 3600
             mins = (elapsed % 3600) // 60
             secs = elapsed % 60
-            self.badge_duration.set_badge(f"[ 时长: {hrs:02d}:{mins:02d}:{secs:02d} ]")
+            self.badge_duration.set_badge(f"时长 {hrs:02d}:{mins:02d}:{secs:02d}")
 
     def on_quick_vol_changed(self, val):
         self.lbl_quick_vol.setText(f"{val}%")
@@ -297,17 +319,23 @@ class MainWindow(QMainWindow):
             self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2a2924'), text_color=self.colors.get('text_dim', '#949289'))
         else:
             room_str = self.room_input.text().strip()
-            if not room_str.isdigit() or int(room_str) <= 0:
+            if not room_str.isdigit():
                 QMessageBox.warning(self, "错误", "请输入有效的 Bilibili 直播间数字房间号")
                 return
-
-            room_id = int(room_str)
+            try:
+                room_id = int(room_str)
+            except (ValueError, TypeError):
+                QMessageBox.warning(self, "错误", "请输入有效的 Bilibili 直播间数字房间号")
+                return
+            if room_id <= 0:
+                QMessageBox.warning(self, "错误", "请输入有效的 Bilibili 直播间数字房间号")
+                return
             self.config_manager.set("room_id", room_id)
 
             self.session_start_time = time.time()
             self.live_timer.start(1000)
 
-            self.status_badge.set_badge("[ 状态: 连接中... ]", bg_color=self.colors.get('accent_gold', '#c4ba97'), text_color=self.colors.get('bg_dark', '#1c1b18'))
+            self.status_badge.set_badge("[ 状态: 连接中... ]", bg_color=self.colors.get('accent_gold', '#bdb79a'), text_color=self.colors.get('bg_dark', '#1a1a18'))
             self.connect_btn.setText("断开连接")
 
             cookie = self.config_manager.get("bilibili_cookie", "")
@@ -355,7 +383,7 @@ class MainWindow(QMainWindow):
             return
 
         self.danmaku_count += 1
-        self.badge_dm_stat.set_badge(f"[ 弹幕: {self.danmaku_count} 条 ]")
+        self.badge_dm_stat.set_badge(f"弹幕 {self.danmaku_count} 条")
         self.session_records.append({
             "time": datetime.now().strftime("%H:%M:%S"),
             "type": "danmaku",
@@ -386,7 +414,7 @@ class MainWindow(QMainWindow):
         self.gift_count += 1
         price = data.get("price", 0)
         self.battery_total += price
-        self.badge_gift_stat.set_badge(f"[ 礼物: {self.gift_count} (¥{self.battery_total:.1f}) ]")
+        self.badge_gift_stat.set_badge(f"礼物 {self.gift_count} (¥{self.battery_total:.1f})")
 
         self.session_records.append({
             "time": datetime.now().strftime("%H:%M:%S"),
@@ -414,8 +442,8 @@ class MainWindow(QMainWindow):
             speech_text = tmpl.format(user=data.get("user", ""), gift_name=data.get("gift_name", ""), num=data.get("num", 1))
             self.queue_tts(speech_text)
 
-        item = QListWidgetItem(f"[ 礼物 ] {data.get('user')}: {data.get('gift_name')} x {data.get('num')}")
-        item.setForeground(Qt.yellow)
+        item = QListWidgetItem(f"〔礼物〕 {data.get('user')}: {data.get('gift_name')} x {data.get('num')}")
+        item.setForeground(QColor(self.colors.get('accent_gold', '#bdb79a')))
         self.vip_list.insertItem(0, item)
 
     @Slot(dict)
@@ -423,7 +451,7 @@ class MainWindow(QMainWindow):
         data["type"] = "superchat"
         price = data.get("price", 0)
         self.sc_total += price
-        self.badge_sc_stat.set_badge(f"[ SC: ¥{self.sc_total:.1f} ]")
+        self.badge_sc_stat.set_badge(f"SC ¥{self.sc_total:.1f}")
 
         self.session_records.append({
             "time": datetime.now().strftime("%H:%M:%S"),
@@ -451,15 +479,15 @@ class MainWindow(QMainWindow):
             speech_text = tmpl.format(user=data.get("user", ""), price=data.get("price", 0), msg=data.get("text", ""))
             self.queue_tts(speech_text)
 
-        item = QListWidgetItem(f"[ SC ¥{data.get('price')} ] {data.get('user')}: {data.get('text')}")
-        item.setForeground(Qt.red)
+        item = QListWidgetItem(f"〔SC ¥{data.get('price')}〕 {data.get('user')}: {data.get('text')}")
+        item.setForeground(QColor(self.colors.get('accent_rose', '#b24355')))
         self.vip_list.insertItem(0, item)
 
     @Slot(dict)
     def on_guard_received(self, data):
         data["type"] = "guard"
         self.guard_count += 1
-        self.badge_guard_stat.set_badge(f"[ 舰队: {self.guard_count} 舰 ]")
+        self.badge_guard_stat.set_badge(f"舰队 {self.guard_count} 舰")
 
         self.session_records.append({
             "time": datetime.now().strftime("%H:%M:%S"),
@@ -482,8 +510,8 @@ class MainWindow(QMainWindow):
         if self.config_manager.get("audio.sound_effects_enabled", True):
             self.sound_manager.play_sfx("levelup")
 
-        item = QListWidgetItem(f"[ 舰长 ] {data.get('user')} 开通了 {data.get('gift_name')}")
-        item.setForeground(Qt.cyan)
+        item = QListWidgetItem(f"〔舰队〕 {data.get('user')} 开通了 {data.get('gift_name')}")
+        item.setForeground(QColor(self.colors.get('accent_purple', '#a899b9')))
         self.vip_list.insertItem(0, item)
 
     @Slot(dict)
@@ -499,8 +527,9 @@ class MainWindow(QMainWindow):
         max_items = 40
         while self.danmaku_layout.count() > max_items + 1:
             item = self.danmaku_layout.takeAt(0)
-            if item and item.widget():
-                item.widget().deleteLater()
+            w = item.widget() if item else None
+            if w is not None:
+                w.deleteLater()
 
         QTimer.singleShot(50, lambda: self.danmaku_scroll.verticalScrollBar().setValue(
             self.danmaku_scroll.verticalScrollBar().maximum()
@@ -509,8 +538,9 @@ class MainWindow(QMainWindow):
     def clear_feed(self):
         while self.danmaku_layout.count() > 1:
             item = self.danmaku_layout.takeAt(0)
-            if item and item.widget():
-                item.widget().deleteLater()
+            w = item.widget() if item else None
+            if w is not None:
+                w.deleteLater()
         self.vip_list.clear()
 
     def export_session_data(self):
@@ -565,6 +595,7 @@ class MainWindow(QMainWindow):
             self.tts_loop = loop
 
             async def _process_queue():
+                assert self.tts_queue is not None
                 while True:
                     text = await self.tts_queue.get()
                     try:

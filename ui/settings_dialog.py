@@ -1,10 +1,9 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QLineEdit, QCheckBox, QSlider, QComboBox, QPushButton,
-    QFormLayout, QGroupBox, QSpinBox
+    QFormLayout, QGroupBox, QSpinBox, QFrame
 )
 from PySide6.QtCore import Qt
-from ui.pixel_widgets import PixelCard
 from core.theme import load_morandi_colors
 
 class SettingsDialog(QDialog):
@@ -12,62 +11,89 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.config_manager = config_manager
         self.colors = load_morandi_colors()
-        self.setWindowTitle("系统设置 - Bilibili Pixel Danmaku")
-        self.resize(560, 520)
+        self.setWindowTitle("系统设置 · Pixel Danmaku")
+        self.resize(580, 560)
         self.init_ui()
         self.load_values()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(10)
         self.tabs = QTabWidget()
 
         # Tab 1: Cookie & Account
         tab_account = QWidget()
-        layout_account = QFormLayout(tab_account)
+        layout_account = QVBoxLayout(tab_account)
+        layout_account.setContentsMargins(12, 12, 12, 12)
         layout_account.setSpacing(10)
 
-        lbl_cookie_tip = QLabel("填写 B 站 Cookie（包含 SESSDATA 与 bili_jct）可解除未登录连接限制，保障高频弹幕、SC、舰长 100% 零遗漏：")
+        grp_cookie = QGroupBox("B 站账号鉴权")
+        gl_cookie = QVBoxLayout(grp_cookie)
+        gl_cookie.setSpacing(8)
+        lbl_cookie_tip = QLabel("填写 B 站 Cookie（包含 SESSDATA 与 bili_jct）可解除未登录连接限制，保障高频弹幕、SC、舰长 100% 零遗漏")
         lbl_cookie_tip.setWordWrap(True)
-        lbl_cookie_tip.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-size: 12px; margin-bottom: 6px;")
-        layout_account.addRow(lbl_cookie_tip)
-
+        lbl_cookie_tip.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-size: 12px;")
+        gl_cookie.addWidget(lbl_cookie_tip)
         self.edit_cookie = QLineEdit()
         self.edit_cookie.setPlaceholderText("例如: SESSDATA=xxxx; bili_jct=xxxx; buvid3=xxxx")
-        layout_account.addRow("B站 Cookie:", self.edit_cookie)
+        gl_cookie.addWidget(self.edit_cookie)
+        layout_account.addWidget(grp_cookie)
+        layout_account.addStretch()
         self.tabs.addTab(tab_account, "账号鉴权")
 
-        # Tab 2: Desktop Notifications (桌面通知)
+        # Tab 2: Desktop Notifications
         tab_notify = QWidget()
-        layout_notify = QFormLayout(tab_notify)
+        layout_notify = QVBoxLayout(tab_notify)
+        layout_notify.setContentsMargins(12, 12, 12, 12)
         layout_notify.setSpacing(10)
 
+        grp_notify = QGroupBox("通知内容")
+        gl_notify = QVBoxLayout(grp_notify)
+        gl_notify.setSpacing(8)
         self.cb_notify_enable = QCheckBox("启用 Linux 原生系统桌面通知 (notify-send)")
         self.cb_notify_dm = QCheckBox("通知普通弹幕")
         self.cb_notify_gift = QCheckBox("通知高能礼物")
         self.cb_notify_sc = QCheckBox("通知醒目留言 (SuperChat)")
         self.cb_notify_guard = QCheckBox("通知大航海 (舰长/提督/总督)")
+        gl_notify.addWidget(self.cb_notify_enable)
+        gl_notify.addWidget(self.cb_notify_dm)
+        gl_notify.addWidget(self.cb_notify_gift)
+        gl_notify.addWidget(self.cb_notify_sc)
+        gl_notify.addWidget(self.cb_notify_guard)
 
         self.spin_notify_expire = QSpinBox()
         self.spin_notify_expire.setRange(1, 30)
         self.spin_notify_expire.setSuffix(" 秒")
+        form_expire = QFormLayout()
+        form_expire.addRow("通知停留时间:", self.spin_notify_expire)
+        gl_notify.addLayout(form_expire)
 
-        layout_notify.addRow(self.cb_notify_enable)
-        layout_notify.addRow(self.cb_notify_dm)
-        layout_notify.addRow(self.cb_notify_gift)
-        layout_notify.addRow(self.cb_notify_sc)
-        layout_notify.addRow(self.cb_notify_guard)
-        layout_notify.addRow("通知停留时间:", self.spin_notify_expire)
+        layout_notify.addWidget(grp_notify)
+        layout_notify.addStretch()
         self.tabs.addTab(tab_notify, "桌面通知")
 
         # Tab 3: TTS
         tab_tts = QWidget()
-        layout_tts = QFormLayout(tab_tts)
+        layout_tts = QVBoxLayout(tab_tts)
+        layout_tts.setContentsMargins(12, 12, 12, 12)
+        layout_tts.setSpacing(10)
 
+        grp_tts_sw = QGroupBox("播报内容")
+        gl_sw = QVBoxLayout(grp_tts_sw)
+        gl_sw.setSpacing(8)
         self.cb_tts_enable = QCheckBox("启用 Edge-TTS 语音播报")
         self.cb_tts_danmaku = QCheckBox("播报普通弹幕")
         self.cb_tts_gifts = QCheckBox("播报礼物感谢")
         self.cb_tts_sc = QCheckBox("播报醒目留言 (SC)")
+        gl_sw.addWidget(self.cb_tts_enable)
+        gl_sw.addWidget(self.cb_tts_danmaku)
+        gl_sw.addWidget(self.cb_tts_gifts)
+        gl_sw.addWidget(self.cb_tts_sc)
 
+        grp_tts_cfg = QGroupBox("播报配置")
+        gl_cfg = QFormLayout(grp_tts_cfg)
+        gl_cfg.setSpacing(8)
         self.combo_voice = QComboBox()
         voices = [
             ("晓晓 (女声，自然)", "zh-CN-XiaoxiaoNeural"),
@@ -84,46 +110,75 @@ class SettingsDialog(QDialog):
         self.edit_gift_tmpl = QLineEdit()
         self.edit_sc_tmpl = QLineEdit()
 
-        layout_tts.addRow(self.cb_tts_enable)
-        layout_tts.addRow(self.cb_tts_danmaku)
-        layout_tts.addRow(self.cb_tts_gifts)
-        layout_tts.addRow(self.cb_tts_sc)
-        layout_tts.addRow("播报音色:", self.combo_voice)
-        layout_tts.addRow("弹幕播报模板:", self.edit_dm_tmpl)
-        layout_tts.addRow("礼物感谢模板:", self.edit_gift_tmpl)
-        layout_tts.addRow("SC播报模板:", self.edit_sc_tmpl)
+        gl_cfg.addRow("播报音色:", self.combo_voice)
+        gl_cfg.addRow("弹幕播报模板:", self.edit_dm_tmpl)
+        gl_cfg.addRow("礼物感谢模板:", self.edit_gift_tmpl)
+        gl_cfg.addRow("SC播报模板:", self.edit_sc_tmpl)
+
+        layout_tts.addWidget(grp_tts_sw)
+        layout_tts.addWidget(grp_tts_cfg)
+        layout_tts.addStretch()
         self.tabs.addTab(tab_tts, "语音播报")
 
         # Tab 4: Audio
         tab_audio = QWidget()
-        layout_audio = QFormLayout(tab_audio)
+        layout_audio = QVBoxLayout(tab_audio)
+        layout_audio.setContentsMargins(12, 12, 12, 12)
+        layout_audio.setSpacing(10)
+
+        grp_audio = QGroupBox("音效与音量")
+        gl_audio = QVBoxLayout(grp_audio)
+        gl_audio.setSpacing(10)
         self.cb_sfx_enable = QCheckBox("启用 8-Bit 复古音效 (送礼/升级/SC)")
-        self.slider_vol = QSlider(Qt.Horizontal)
+        self.slider_vol = QSlider(Qt.Orientation.Horizontal)
         self.slider_vol.setRange(0, 100)
         self.slider_vol.setValue(80)
         self.lbl_vol = QLabel("80%")
+        self.lbl_vol.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-weight: bold;")
         self.slider_vol.valueChanged.connect(lambda v: self.lbl_vol.setText(f"{v}%"))
 
         vol_box = QHBoxLayout()
         vol_box.addWidget(self.slider_vol)
         vol_box.addWidget(self.lbl_vol)
 
-        layout_audio.addRow(self.cb_sfx_enable)
-        layout_audio.addRow("主音量:", vol_box)
+        gl_audio.addWidget(self.cb_sfx_enable)
+        gl_audio.addWidget(QLabel("主音量:"))
+        gl_audio.addLayout(vol_box)
+        layout_audio.addWidget(grp_audio)
+        layout_audio.addStretch()
         self.tabs.addTab(tab_audio, "音效音量")
 
         # Tab 5: Filter
         tab_filter = QWidget()
-        layout_filter = QFormLayout(tab_filter)
+        layout_filter = QVBoxLayout(tab_filter)
+        layout_filter.setContentsMargins(12, 12, 12, 12)
+        layout_filter.setSpacing(10)
+
+        grp_filter = QGroupBox("屏蔽规则")
+        gl_filter = QVBoxLayout(grp_filter)
+        gl_filter.setSpacing(8)
+        lbl_filter_tip = QLabel("命中关键词的弹幕将不会显示、播报与通知")
+        lbl_filter_tip.setStyleSheet(f"color: {self.colors.get('text_dim', '#dededd')}; font-size: 12px;")
         self.edit_blocked = QLineEdit()
         self.edit_blocked.setPlaceholderText("多个关键词用逗号隔开")
-        layout_filter.addRow("屏蔽关键词列表:", self.edit_blocked)
+        gl_filter.addWidget(lbl_filter_tip)
+        gl_filter.addWidget(self.edit_blocked)
+        layout_filter.addWidget(grp_filter)
+        layout_filter.addStretch()
         self.tabs.addTab(tab_filter, "弹幕过滤")
 
         main_layout.addWidget(self.tabs)
 
+        # Bottom button bar with separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"background-color: {self.colors.get('border', '#64635f')}; max-height: 1px; border: none;")
+        main_layout.addWidget(sep)
+
         btn_box = QHBoxLayout()
+        btn_box.setSpacing(8)
         self.btn_save = QPushButton("保存配置")
+        self.btn_save.setObjectName("save_btn")
         self.btn_cancel = QPushButton("取消")
         self.btn_save.clicked.connect(self.save_and_close)
         self.btn_cancel.clicked.connect(self.reject)
