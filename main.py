@@ -1,7 +1,7 @@
 import sys
 import os
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QGuiApplication
 from PySide6.QtCore import Qt
 
 from core.config_manager import ConfigManager
@@ -15,6 +15,9 @@ def main():
 
     font = QFont("Noto Sans CJK SC", 10)
     app.setFont(font)
+    
+    if sys.platform == "darwin":
+        QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Dark)
 
     qss = get_pixel_qss()
     app.setStyleSheet(qss)

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot, QTimer, QFileSystemWatcher
 from PySide6.QtGui import QColor
 from core.bilibili_ws import BilibiliWSClient, BilibiliWSThread
+from core.desktop_notifier import DesktopNotifier
 from core.edge_tts import EdgeTTS
 from core.sound_manager import SoundManager
 from core.desktop_notifier import DesktopNotifier
@@ -30,6 +31,7 @@ class MainWindow(QMainWindow):
         self.sound_manager = SoundManager(self)
         self.tts_engine = EdgeTTS()
         self.desktop_notifier = DesktopNotifier(self.config_manager)
+        self.desktop_notifier.set_activation_callback(self._raise_window)
 
         self.tts_loop = None
         self.tts_queue = None
@@ -61,6 +63,11 @@ class MainWindow(QMainWindow):
 
         # Start TTS Async Task Queue Worker
         QTimer.singleShot(500, self.start_tts_queue_worker)
+
+    def _raise_window(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
 
     @Slot()
     def reload_theme(self):
