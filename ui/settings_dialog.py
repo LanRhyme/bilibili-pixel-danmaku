@@ -1,3 +1,5 @@
+import sys
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QLineEdit, QCheckBox, QSlider, QComboBox, QPushButton,
@@ -51,7 +53,7 @@ class SettingsDialog(QDialog):
         grp_notify = QGroupBox("通知内容")
         gl_notify = QVBoxLayout(grp_notify)
         gl_notify.setSpacing(8)
-        self.cb_notify_enable = QCheckBox("启用 Linux 原生系统桌面通知 (notify-send)")
+        self.cb_notify_enable = QCheckBox("启用系统桌面通知")
         self.cb_notify_dm = QCheckBox("通知普通弹幕")
         self.cb_notify_gift = QCheckBox("通知高能礼物")
         self.cb_notify_sc = QCheckBox("通知醒目留言 (SuperChat)")
@@ -68,6 +70,17 @@ class SettingsDialog(QDialog):
         form_expire = QFormLayout()
         form_expire.addRow("通知停留时间:", self.spin_notify_expire)
         gl_notify.addLayout(form_expire)
+
+        if sys.platform == "darwin":
+            self.spin_notify_expire.setEnabled(False)
+            lbl_expire_hint = QLabel(
+                "此选项仅 Linux 生效"
+            )
+            lbl_expire_hint.setStyleSheet(
+                f"color: {self.colors.get('text_dim', '#dededd')}; font-size: 12px;"
+            )
+            lbl_expire_hint.setWordWrap(True)
+            gl_notify.addWidget(lbl_expire_hint)
 
         layout_notify.addWidget(grp_notify)
         layout_notify.addStretch()

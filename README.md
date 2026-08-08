@@ -15,7 +15,7 @@
 - 莫兰迪主题随壁纸动态同步（由 morandi-gen.py 生成配色）
 - Edge-TTS 中文语音播报，多音色与自定义播报模板
 - 程序实时合成 8-Bit 复古音效（送礼、升级、SC）
-- Linux 原生桌面通知（notify-send），支持头像图标展示
+- 系统桌面通知，支持头像展示
 - 弹幕、礼物、高能榜面板字号与头像大小可调
 - 关键词屏蔽、弹幕记录一键导出 CSV
 - 弹幕头像异步下载与本地缓存
@@ -23,14 +23,14 @@
 ## 环境要求
 
 - Python 3.10+
-- Linux 桌面环境（通知功能依赖 notify-send）
+- Linux 桌面环境（通知依赖 notify-send）或 macOS（通知依赖 PyObjC）
 
 ## 安装
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install PySide6 aiohttp edge-tts
+pip install PySide6 aiohttp edge-tts PyObjC
 ```
 
 ## 使用
