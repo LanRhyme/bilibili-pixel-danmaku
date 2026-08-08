@@ -2,18 +2,16 @@ import asyncio
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QListWidget, QListWidgetItem, QFrame, QSplitter, QStatusBar,
-    QMessageBox, QApplication, QScrollArea
+    QMessageBox, QApplication, QScrollArea, QSlider
 )
 from PySide6.QtCore import Qt, Slot, QTimer, QFileSystemWatcher
 from core.bilibili_ws import BilibiliWSClient, BilibiliWSThread
 from core.edge_tts import EdgeTTS
 from core.sound_manager import SoundManager
+from core.desktop_notifier import DesktopNotifier
 from ui.pixel_widgets import PixelBadge, DanmakuCardWidget, PixelCard
-from ui.overlay_window import DesktopOverlayWindow
 from ui.settings_dialog import SettingsDialog
 from core.theme import get_pixel_qss, MORANDI_APP_COLORS, load_morandi_colors
-
-from core.desktop_notifier import DesktopNotifier
 
 class MainWindow(QMainWindow):
     def __init__(self, config_manager, parent=None):
@@ -31,8 +29,8 @@ class MainWindow(QMainWindow):
         self.tts_loop = None
         self.tts_queue = None
 
-        self.setWindowTitle("Bilibili Pixel Danmaku (复古像素弹幕助手)")
-        self.resize(860, 600)
+        self.setWindowTitle("Bilibili Pixel Danmaku (莫兰迪像素风弹幕助手)")
+        self.resize(920, 640)
 
         self.init_ui()
         self.load_config_into_ui()
@@ -52,7 +50,7 @@ class MainWindow(QMainWindow):
             self.colors = load_morandi_colors()
             qss = get_pixel_qss()
             QApplication.instance().setStyleSheet(qss)
-            self.status_bar.showMessage("已自动同步应用 Morandi 主题色彩配置")
+            self.status_bar.showMessage("已自动同步全局 Morandi 壁纸主题色彩配置")
             self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-weight: bold;")
             if self.ws_client and self.ws_client.is_running:
                 self.status_badge.set_badge("已连接", bg_color=self.colors.get('accent_green', '#a8aba0'), text_color=self.colors.get('bg_dark', '#1a1a18'))
@@ -65,27 +63,29 @@ class MainWindow(QMainWindow):
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(14, 14, 14, 14)
+        main_layout.setSpacing(12)
 
-        # Top Control Bar
+        # Top Control Bar (Header Card)
         top_card = PixelCard()
         top_layout = QHBoxLayout(top_card)
-        top_layout.setContentsMargins(10, 8, 10, 8)
-        top_layout.setSpacing(10)
+        top_layout.setContentsMargins(12, 10, 12, 10)
+        top_layout.setSpacing(12)
 
         lbl_room = QLabel("直播间号:")
-        lbl_room.setStyleSheet(f"font-weight: bold; color: {self.colors.get('accent_blue', '#7aa2f7')};")
+        lbl_room.setStyleSheet(f"font-weight: bold; font-size: 13px; color: {self.colors.get('primary', '#afac9c')};")
+        
         self.room_input = QLineEdit()
         self.room_input.setPlaceholderText("例如: 544853")
         self.room_input.setMaximumWidth(160)
+        self.room_input.returnPressed.connect(self.toggle_connection)
 
         self.connect_btn = QPushButton("连接直播间")
         self.connect_btn.clicked.connect(self.toggle_connection)
 
-        self.status_badge = PixelBadge("已断开", bg_color=self.colors.get('bg_card', '#414868'), text_color=self.colors.get('text', '#c0caf5'))
+        self.status_badge = PixelBadge("已断开", bg_color=self.colors.get('bg_card', '#383732'), text_color=self.colors.get('text', '#f2f2f2'))
         self.pop_label = QLabel("人气: 0")
-        self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#e0af68')}; font-weight: bold;")
+        self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-weight: bold; font-size: 13px;")
 
         top_layout.addWidget(lbl_room)
         top_layout.addWidget(self.room_input)
@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
         top_layout.addStretch()
         top_layout.addWidget(self.pop_label)
 
-        btn_settings = QPushButton("⚙ 设置")
+        btn_settings = QPushButton("⚙ 系统设置")
         btn_settings.clicked.connect(self.open_settings)
         top_layout.addWidget(btn_settings)
 
@@ -102,15 +102,17 @@ class MainWindow(QMainWindow):
 
         # Center Splitter
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(8)
 
         # Left: Danmaku Realtime Feed List
         left_panel = PixelCard()
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(8, 8, 8, 8)
+        left_layout.setContentsMargins(10, 10, 10, 10)
+        left_layout.setSpacing(8)
 
         feed_title_box = QHBoxLayout()
-        feed_title = QLabel("实时弹幕数据流 (Realtime Stream)")
-        feed_title.setStyleSheet(f"font-weight: bold; color: {self.colors.get('primary', '#7aa2f7')};")
+        feed_title = QLabel("实时弹幕数据流 (Realtime Danmaku Stream)")
+        feed_title.setStyleSheet(f"font-weight: bold; font-size: 13px; color: {self.colors.get('primary', '#afac9c')};")
         self.btn_clear = QPushButton("清屏")
         self.btn_clear.clicked.connect(self.clear_feed)
         feed_title_box.addWidget(feed_title)
@@ -120,47 +122,82 @@ class MainWindow(QMainWindow):
 
         self.danmaku_scroll = QScrollArea()
         self.danmaku_scroll.setWidgetResizable(True)
+        self.danmaku_scroll.setStyleSheet(f"background-color: {self.colors.get('bg_dark', '#1a1a18')}; border-radius: 6px;")
+        
         self.danmaku_container = QWidget()
         self.danmaku_layout = QVBoxLayout(self.danmaku_container)
-        self.danmaku_layout.setContentsMargins(4, 4, 4, 4)
-        self.danmaku_layout.setSpacing(6)
+        self.danmaku_layout.setContentsMargins(6, 6, 6, 6)
+        self.danmaku_layout.setSpacing(8)
         self.danmaku_layout.addStretch()
         self.danmaku_scroll.setWidget(self.danmaku_container)
 
         left_layout.addWidget(self.danmaku_scroll)
         splitter.addWidget(left_panel)
 
-        # Right: Quick Controls & Gift Wall
+        # Right: Quick Controls & VIP Wall
         right_panel = PixelCard()
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(8, 8, 8, 8)
+        right_layout.setContentsMargins(10, 10, 10, 10)
+        right_layout.setSpacing(10)
 
         right_title = QLabel("控制中心与贵宾区")
-        right_title.setStyleSheet(f"font-weight: bold; color: {self.colors.get('accent_purple', '#bb9af7')};")
+        right_title.setStyleSheet(f"font-weight: bold; font-size: 13px; color: {self.colors.get('accent_purple', '#a899b9')};")
         right_layout.addWidget(right_title)
 
-        self.btn_toggle_tts = QPushButton("语音播报: 开")
+        # Quick Toggle Switch Buttons
+        btn_box = QHBoxLayout()
+        btn_box.setSpacing(6)
+
+        self.btn_toggle_tts = QPushButton("🔊 语音播报")
         self.btn_toggle_tts.setCheckable(True)
         self.btn_toggle_tts.clicked.connect(self.toggle_tts)
-        right_layout.addWidget(self.btn_toggle_tts)
+        btn_box.addWidget(self.btn_toggle_tts)
 
-        self.btn_toggle_sfx = QPushButton("复古音效: 开")
+        self.btn_toggle_sfx = QPushButton("🎵 复古音效")
         self.btn_toggle_sfx.setCheckable(True)
         self.btn_toggle_sfx.clicked.connect(self.toggle_sfx)
-        right_layout.addWidget(self.btn_toggle_sfx)
+        btn_box.addWidget(self.btn_toggle_sfx)
 
-        self.btn_toggle_notify = QPushButton("桌面通知: 开")
+        right_layout.addLayout(btn_box)
+
+        self.btn_toggle_notify = QPushButton("🔔 桌面系统通知: 开")
         self.btn_toggle_notify.setCheckable(True)
         self.btn_toggle_notify.clicked.connect(self.toggle_notify)
         right_layout.addWidget(self.btn_toggle_notify)
 
+        # Master volume slider
+        vol_box = QHBoxLayout()
+        lbl_vol_icon = QLabel("音量:")
+        lbl_vol_icon.setStyleSheet(f"font-size: 12px; color: {self.colors.get('text_dim', '#dededd')};")
+        self.slider_quick_vol = QSlider(Qt.Horizontal)
+        self.slider_quick_vol.setRange(0, 100)
+        self.slider_quick_vol.valueChanged.connect(self.on_quick_vol_changed)
+        self.lbl_quick_vol = QLabel("80%")
+        self.lbl_quick_vol.setFixedWidth(36)
+        self.lbl_quick_vol.setStyleSheet(f"font-size: 12px; color: {self.colors.get('accent_gold', '#bdb79a')}; font-weight: bold;")
+        vol_box.addWidget(lbl_vol_icon)
+        vol_box.addWidget(self.slider_quick_vol)
+        vol_box.addWidget(self.lbl_quick_vol)
+        right_layout.addLayout(vol_box)
+
         # VIP Gift / Superchat feed
-        lbl_vip = QLabel("高能榜与醒目留言 (SC/Gifts):")
-        lbl_vip.setStyleSheet(f"font-weight: bold; color: {self.colors.get('accent_gold', '#bdb79a')}; margin-top: 10px;")
+        lbl_vip = QLabel("高能榜与醒目留言 (SC / Gifts):")
+        lbl_vip.setStyleSheet(f"font-weight: bold; font-size: 12px; color: {self.colors.get('accent_gold', '#bdb79a')}; margin-top: 6px;")
         right_layout.addWidget(lbl_vip)
 
         self.vip_list = QListWidget()
-        self.vip_list.setStyleSheet(f"background-color: {self.colors.get('bg_dark', '#1a1a18')}; border: 2px solid {self.colors.get('border_dark', '#16161e')};")
+        self.vip_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {self.colors.get('bg_dark', '#1a1a18')};
+                border: 2px solid {self.colors.get('border_dark', '#16161e')};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+            QListWidget::item {{
+                padding: 6px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            }}
+        """)
         right_layout.addWidget(self.vip_list, 1)
 
         splitter.addWidget(right_panel)
@@ -180,18 +217,23 @@ class MainWindow(QMainWindow):
 
         tts_enabled = self.config_manager.get("tts.enabled", True)
         self.btn_toggle_tts.setChecked(tts_enabled)
-        self.btn_toggle_tts.setText(f"语音播报: {'开' if tts_enabled else '关'}")
 
         sfx_enabled = self.config_manager.get("audio.sound_effects_enabled", True)
         self.btn_toggle_sfx.setChecked(sfx_enabled)
-        self.btn_toggle_sfx.setText(f"复古音效: {'开' if sfx_enabled else '关'}")
 
         notify_enabled = self.config_manager.get("notification.enabled", True)
         self.btn_toggle_notify.setChecked(notify_enabled)
-        self.btn_toggle_notify.setText(f"桌面通知: {'开' if notify_enabled else '关'}")
+        self.btn_toggle_notify.setText(f"🔔 桌面系统通知: {'开' if notify_enabled else '关'}")
 
         master_vol = self.config_manager.get("audio.master_volume", 80)
+        self.slider_quick_vol.setValue(master_vol)
+        self.lbl_quick_vol.setText(f"{master_vol}%")
         self.sound_manager.set_master_volume(master_vol)
+
+    def on_quick_vol_changed(self, val):
+        self.lbl_quick_vol.setText(f"{val}%")
+        self.sound_manager.set_master_volume(val)
+        self.config_manager.set("audio.master_volume", val)
 
     def toggle_connection(self):
         if self.ws_client and self.ws_client.is_running:
@@ -345,7 +387,7 @@ class MainWindow(QMainWindow):
         count = self.danmaku_layout.count()
         self.danmaku_layout.insertWidget(count - 1, card)
 
-        max_items = 30
+        max_items = 40
         while self.danmaku_layout.count() > max_items + 1:
             item = self.danmaku_layout.takeAt(0)
             if item and item.widget():
@@ -365,17 +407,15 @@ class MainWindow(QMainWindow):
     def toggle_tts(self):
         enabled = self.btn_toggle_tts.isChecked()
         self.config_manager.set("tts.enabled", enabled)
-        self.btn_toggle_tts.setText(f"语音播报: {'开' if enabled else '关'}")
 
     def toggle_sfx(self):
         enabled = self.btn_toggle_sfx.isChecked()
         self.config_manager.set("audio.sound_effects_enabled", enabled)
-        self.btn_toggle_sfx.setText(f"复古音效: {'开' if enabled else '关'}")
 
     def toggle_notify(self):
         enabled = self.btn_toggle_notify.isChecked()
         self.config_manager.set("notification.enabled", enabled)
-        self.btn_toggle_notify.setText(f"桌面通知: {'开' if enabled else '关'}")
+        self.btn_toggle_notify.setText(f"🔔 桌面系统通知: {'开' if enabled else '关'}")
 
     def open_settings(self):
         dialog = SettingsDialog(self.config_manager, self)
