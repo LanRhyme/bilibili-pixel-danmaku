@@ -24,8 +24,11 @@ class BilibiliWSClient(QObject):
 
     def __init__(self, room_id=0, cookie="", parent=None):
         super().__init__(parent)
-        self.room_id = int(room_id)
-        self.real_room_id = int(room_id)
+        try:
+            self.room_id = int(room_id)
+        except (ValueError, TypeError):
+            self.room_id = 0
+        self.real_room_id = self.room_id
         self.cookie = cookie.strip()
         self.user_uid = 0
         self.buvid = ""
@@ -35,6 +38,7 @@ class BilibiliWSClient(QObject):
         self.avatar_cache = {}
 
     async def get_room_info(self):
+        assert self.session is not None
         # 1. If cookie provided, get login user info & buvid
         if self.cookie:
             try:
@@ -128,7 +132,6 @@ class BilibiliWSClient(QObject):
         except Exception as e:
             self.disconnected_signal.emit(str(e))
         finally:
-            await self.web_server.stop()
             self.is_running = False
             self.disconnected_signal.emit("连接已关闭")
 
@@ -138,8 +141,6 @@ class BilibiliWSClient(QObject):
                 hb_packet = struct.pack(">IHHII", 16, 16, 1, OP_HEARTBEAT, 1)
                 await ws.send_bytes(hb_packet)
                 await asyncio.sleep(30)
-            except asyncio.CancelledError:
-                break
             except Exception:
                 break
 
@@ -206,7 +207,7 @@ class BilibiliWSClient(QObject):
             url = f"https://api.bilibili.com/x/web-interface/card?mid={uid}"
             headers = {"User-Agent": "Mozilla/5.0"}
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers, timeout=3) as resp:
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=3)) as resp:
                     if resp.status == 200:
                         j = await resp.json()
                         face = j.get("data", {}).get("card", {}).get("face", "")
@@ -237,7 +238,6 @@ class BilibiliWSClient(QObject):
                 "type": "chat"
             }
             self.danmaku_signal.emit(danmaku_data)
-            asyncio.create_task(self.web_server.broadcast(danmaku_data))
 
         elif cmd == "SEND_GIFT":
             gdata = data.get("data", {})
@@ -253,7 +253,6 @@ class BilibiliWSClient(QObject):
                 "type": "gift"
             }
             self.gift_signal.emit(gift_data)
-            asyncio.create_task(self.web_server.broadcast(gift_data))
 
         elif cmd in ("SUPER_CHAT_MESSAGE", "SUPER_CHAT_MESSAGE_JPN"):
             scdata = data.get("data", {})
@@ -269,7 +268,6 @@ class BilibiliWSClient(QObject):
                 "type": "superchat"
             }
             self.superchat_signal.emit(sc_data)
-            asyncio.create_task(self.web_server.broadcast(sc_data))
 
         elif cmd == "GUARD_BUY":
             gbdata = data.get("data", {})
@@ -284,7 +282,6 @@ class BilibiliWSClient(QObject):
                 "type": "guard"
             }
             self.guard_signal.emit(guard_data)
-            asyncio.create_task(self.web_server.broadcast(guard_data))
 
         elif cmd in ("INTERACT_WORD", "LIKE_INFO_V3_CLICK"):
             idata = data.get("data", {})
@@ -297,7 +294,6 @@ class BilibiliWSClient(QObject):
                 "type": "enter"
             }
             self.interact_signal.emit(interact_data)
-            asyncio.create_task(self.web_server.broadcast(interact_data))
 
 class BilibiliWSThread(QThread):
     def __init__(self, client: BilibiliWSClient, parent=None):
