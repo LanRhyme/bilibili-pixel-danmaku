@@ -371,6 +371,7 @@ class MainWindow(QMainWindow):
             self.ws_client = BilibiliWSClient(room_id, cookie=cookie)
             self.ws_client.connected_signal.connect(self.on_ws_connected)
             self.ws_client.disconnected_signal.connect(self.on_ws_disconnected)
+            self.ws_client.reconnect_signal.connect(self.on_reconnecting)
             self.ws_client.danmaku_signal.connect(self.on_danmaku_received)
             self.ws_client.gift_signal.connect(self.on_gift_received)
             self.ws_client.superchat_signal.connect(self.on_superchat_received)
@@ -386,13 +387,27 @@ class MainWindow(QMainWindow):
         self.status_badge.set_badge("[ 状态: 已连接 ]", bg_color=self.colors.get('accent_green', '#8ea382'), text_color=self.colors.get('bg_dark', '#1c1b18'))
         cookie_tip = " (已登录认证)" if self.config_manager.get("bilibili_cookie", "") else " (游客模式)"
         self.status_bar.showMessage(f"成功连接至 Bilibili 直播间: {room_id}{cookie_tip}")
+        # 自动重连成功后恢复直播计时
+        if self.session_start_time and not self.live_timer.isActive():
+            self.live_timer.start(1000)
 
     @Slot(str)
     def on_ws_disconnected(self, reason):
         self.live_timer.stop()
-        self.connect_btn.setText("连接直播间")
-        self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('accent_rose', '#c47079'), text_color=self.colors.get('bg_dark', '#1c1b18'))
+        if self.ws_client and self.ws_client.is_running:
+            # 自动重连中, 保持可手动断开状态
+            self.connect_btn.setText("断开连接")
+        else:
+            self.connect_btn.setText("连接直播间")
+            self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('accent_rose', '#b24355'), text_color=self.colors.get('bg_dark', '#1a1a18'))
         self.status_bar.showMessage(f"直播间连接断开: {reason}")
+
+    @Slot(int, int)
+    def on_reconnecting(self, delay, attempt):
+        """意外断线进入自动重连"""
+        self.status_badge.set_badge(f"[ 状态: 重连中 {attempt} ]", bg_color=self.colors.get('accent_gold', '#bdb79a'), text_color=self.colors.get('bg_dark', '#1a1a18'))
+        self.connect_btn.setText("断开连接")
+        self.status_bar.showMessage(f"连接断开，{delay} 秒后自动重连（第 {attempt} 次）")
 
     @Slot(int)
     def on_popularity_updated(self, pop):

@@ -12,9 +12,16 @@ OP_SEND_SMS_REPLY = 5
 OP_AUTH = 7
 OP_AUTH_REPLY = 8
 
+# 自动重连退避间隔（秒），超过后固定 30 秒
+RETRY_DELAYS = [3, 5, 10, 15, 20, 30]
+# 超过该时长未收到任何数据（含心跳回复）判定连接失效，主动断开重连
+RECEIVE_TIMEOUT = 90
+
+
 class BilibiliWSClient(QObject):
     connected_signal = Signal(str)
     disconnected_signal = Signal(str)
+    reconnect_signal = Signal(int, int)  # (等待秒数, 重试次数)
     danmaku_signal = Signal(dict)
     gift_signal = Signal(dict)
     superchat_signal = Signal(dict)
@@ -94,46 +101,64 @@ class BilibiliWSClient(QObject):
 
     async def start_async(self):
         self.is_running = True
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Referer": f"https://live.bilibili.com/{self.room_id}"
-            }
-            if self.cookie:
-                headers["Cookie"] = self.cookie
+        retry = 0
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": f"https://live.bilibili.com/{self.room_id}"
+        }
+        if self.cookie:
+            headers["Cookie"] = self.cookie
 
-            async with aiohttp.ClientSession(headers=headers) as session:
-                self.session = session
-                host, port, token = await self.get_room_info()
-                ws_url = f"wss://{host}:{port}/sub"
-                
-                async with session.ws_connect(ws_url) as ws:
-                    self.ws = ws
-                    auth_body = json.dumps({
-                        "uid": self.user_uid,
-                        "roomid": self.real_room_id,
-                        "protover": 3,
-                        "platform": "web",
-                        "type": 2,
-                        "key": token
-                    })
-                    await ws.send_bytes(self.make_packet(OP_AUTH, auth_body))
-                    self.connected_signal.emit(str(self.real_room_id))
+        while self.is_running:
+            try:
+                async with aiohttp.ClientSession(headers=headers) as session:
+                    self.session = session
+                    await self._connect_once(session)
+                # 连接正常结束（服务器断开/网络中断），进入自动重连
+            except Exception as e:
+                print(f"[WS] 连接异常: {e}")
 
-                    heartbeat_task = asyncio.create_task(self._heartbeat_loop(ws))
-                    try:
-                        async for msg in ws:
-                            if not self.is_running:
-                                break
-                            if msg.type == aiohttp.WSMsgType.BINARY:
-                                self._parse_packet(msg.data)
-                    finally:
-                        heartbeat_task.cancel()
-        except Exception as e:
-            self.disconnected_signal.emit(str(e))
-        finally:
-            self.is_running = False
-            self.disconnected_signal.emit("连接已关闭")
+            if not self.is_running:
+                break
+
+            delay = RETRY_DELAYS[min(retry, len(RETRY_DELAYS) - 1)]
+            retry += 1
+            self.reconnect_signal.emit(delay, retry)
+            # 分段等待，用户手动断开时能及时退出
+            waited = 0.0
+            while self.is_running and waited < delay:
+                await asyncio.sleep(0.5)
+                waited += 0.5
+
+        self.disconnected_signal.emit("连接已关闭")
+
+    async def _connect_once(self, session):
+        """单次连接尝试：获取弹幕服务器信息 -> 鉴权 -> 收消息循环，断开时返回"""
+        host, port, token = await self.get_room_info()
+        ws_url = f"wss://{host}:{port}/sub"
+
+        async with session.ws_connect(ws_url, receive_timeout=RECEIVE_TIMEOUT) as ws:
+            self.ws = ws
+            auth_body = json.dumps({
+                "uid": self.user_uid,
+                "roomid": self.real_room_id,
+                "protover": 3,
+                "platform": "web",
+                "type": 2,
+                "key": token
+            })
+            await ws.send_bytes(self.make_packet(OP_AUTH, auth_body))
+            self.connected_signal.emit(str(self.real_room_id))
+
+            heartbeat_task = asyncio.create_task(self._heartbeat_loop(ws))
+            try:
+                async for msg in ws:
+                    if not self.is_running:
+                        break
+                    if msg.type == aiohttp.WSMsgType.BINARY:
+                        self._parse_packet(msg.data)
+            finally:
+                heartbeat_task.cancel()
 
     async def _heartbeat_loop(self, ws):
         while self.is_running:
