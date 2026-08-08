@@ -3,10 +3,10 @@ import urllib.request
 import threading
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QLabel, QHBoxLayout, QVBoxLayout, QPushButton
+    QWidget, QFrame, QLabel, QHBoxLayout, QVBoxLayout
 )
 from PySide6.QtCore import Qt, Signal, QObject
-from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QFont
+from PySide6.QtGui import QPixmap, QPainter, QColor, QFont
 from core.theme import load_morandi_colors
 
 AVATAR_CACHE_DIR = Path.home() / ".cache" / "bilibili-danmaku" / "avatars"
@@ -87,17 +87,17 @@ class AvatarWidget(QLabel):
             )
             painter.drawPixmap(1, 1, scaled)
         else:
-            # Pixel initial box
+            # Morandi Initial Avatar Box
             bg_col = QColor(self.colors.get("primary", "#b8b39f"))
             painter.fillRect(1, 1, self.avatar_size - 2, self.avatar_size - 2, bg_col)
-            painter.setPen(QColor(self.colors.get("bg_dark", "#1a1a18")))
+            painter.setPen(QColor(self.colors.get("bg_dark", "#1c1b18")))
             font = QFont("Noto Sans CJK SC", 10, QFont.Bold)
             painter.setFont(font)
             initial = (self.username[:1] if self.username else "U").upper()
             painter.drawText(0, 0, self.avatar_size, self.avatar_size, Qt.AlignCenter, initial)
 
-        # Crisp 1px pixel border
-        painter.setPen(QColor(self.colors.get("border", "#4e4c44")))
+        # 1px border
+        painter.setPen(QColor(self.colors.get("border", "#3d3c34")))
         painter.drawRect(0, 0, self.avatar_size - 1, self.avatar_size - 1)
         painter.end()
 
@@ -108,16 +108,14 @@ class PixelCard(QFrame):
         super().__init__(parent)
         self.setObjectName("card_frame")
         colors = load_morandi_colors()
-        if bg_color is None: bg_color = colors.get("bg_panel", "#242320")
-        if border_color is None: border_color = colors.get("border_dark", "#121210")
+        if bg_color is None: bg_color = colors.get("bg_panel", "#23221e")
+        if border_color is None: border_color = colors.get("border", "#3d3c34")
 
         self.setStyleSheet(f"""
             QFrame#card_frame {{
                 background-color: {bg_color};
-                border-top: 1px solid {colors.get('border', '#4e4c44')};
-                border-left: 1px solid {colors.get('border', '#4e4c44')};
-                border-bottom: 2px solid {border_color};
-                border-right: 2px solid {border_color};
+                border: 1px solid {border_color};
+                border-radius: 0px;
             }}
         """)
 
@@ -126,7 +124,7 @@ class PixelBadge(QLabel):
         super().__init__(text, parent)
         colors = load_morandi_colors()
         self.bg_color = bg_color if bg_color else colors.get("primary", "#b8b39f")
-        self.text_color = text_color if text_color else colors.get("bg_dark", "#1a1a18")
+        self.text_color = text_color if text_color else colors.get("bg_dark", "#1c1b18")
         self.update_style()
 
     def set_badge(self, text, bg_color=None, text_color=None):
@@ -143,27 +141,45 @@ class PixelBadge(QLabel):
                 color: {self.text_color};
                 font-size: 10px;
                 font-weight: bold;
-                padding: 1px 5px;
+                padding: 2px 6px;
                 border: 1px solid {colors.get('border_dark', '#121210')};
+                border-radius: 0px;
             }}
         """)
 
-class DanmakuCardWidget(PixelCard):
+class DanmakuCardWidget(QFrame):
     def __init__(self, data, parent=None):
-        colors = load_morandi_colors()
-        msg_type = data.get("type", "danmaku")
-        
-        # Unified Morandi card backgrounds
-        card_bg = colors.get("bg_card", "#2e2d29")
-        if msg_type == "superchat":
-            card_bg = colors.get("bg_active", "#3a3833")
-
-        super().__init__(bg_color=card_bg, parent=parent)
+        super().__init__(parent)
+        self.setObjectName("danmaku_item_card")
         self.data = data
+        self.colors = load_morandi_colors()
+
+        msg_type = self.data.get("type", "danmaku")
+        if msg_type == "superchat":
+            self.setStyleSheet(f"""
+                QFrame#danmaku_item_card {{
+                    background-color: {self.colors.get('bg_active', '#35342e')};
+                    border: 1px solid {self.colors.get('accent_rose', '#ba6670')};
+                }}
+            """)
+        elif msg_type == "gift":
+            self.setStyleSheet(f"""
+                QFrame#danmaku_item_card {{
+                    background-color: {self.colors.get('bg_card', '#2a2924')};
+                    border: 1px solid {self.colors.get('accent_gold', '#c4ba97')};
+                }}
+            """)
+        else:
+            self.setStyleSheet(f"""
+                QFrame#danmaku_item_card {{
+                    background-color: {self.colors.get('bg_card', '#2a2924')};
+                    border: 1px solid {self.colors.get('border', '#3d3c34')};
+                }}
+            """)
+
         self.init_ui()
 
     def init_ui(self):
-        colors = load_morandi_colors()
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(8, 6, 8, 6)
         main_layout.setSpacing(8)
@@ -177,7 +193,7 @@ class DanmakuCardWidget(PixelCard):
         # Right Column
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(3)
+        right_layout.setSpacing(2)
 
         # Header Row
         header_layout = QHBoxLayout()
@@ -188,25 +204,25 @@ class DanmakuCardWidget(PixelCard):
         guard_level = self.data.get("guard_level", 0)
         if guard_level > 0:
             guard_text = "总督" if guard_level == 1 else "提督" if guard_level == 2 else "舰长"
-            guard_badge = PixelBadge(f"[ {guard_text} ]", bg_color=colors.get('accent_gold', '#c2b88f'), text_color=colors.get('bg_dark', '#1a1a18'))
+            guard_badge = PixelBadge(f"[ {guard_text} ]", bg_color=self.colors.get('accent_gold', '#c4ba97'), text_color=self.colors.get('bg_dark', '#1c1b18'))
             header_layout.addWidget(guard_badge)
 
         medal_name = self.data.get("medal_name", "")
         medal_level = self.data.get("medal_level", 0)
         if medal_name:
-            medal_badge = PixelBadge(f"[ {medal_name} {medal_level} ]", bg_color=colors.get('accent_purple', '#9e8ea8'), text_color=colors.get('bg_dark', '#1a1a18'))
+            medal_badge = PixelBadge(f"[ {medal_name} {medal_level} ]", bg_color=self.colors.get('accent_purple', '#a292ad'), text_color=self.colors.get('bg_dark', '#1c1b18'))
             header_layout.addWidget(medal_badge)
 
         if msg_type == "gift":
-            tag_badge = PixelBadge("[ 礼物 ]", bg_color=colors.get('accent_gold', '#c2b88f'), text_color=colors.get('bg_dark', '#1a1a18'))
+            tag_badge = PixelBadge("[ 礼物 ]", bg_color=self.colors.get('accent_gold', '#c4ba97'), text_color=self.colors.get('bg_dark', '#1c1b18'))
             header_layout.addWidget(tag_badge)
         elif msg_type == "superchat":
             price = self.data.get("price", 0)
-            tag_badge = PixelBadge(f"[ SC ¥{price} ]", bg_color=colors.get('accent_rose', '#ba6670'), text_color=colors.get('text', '#e8e6df'))
+            tag_badge = PixelBadge(f"[ SC ¥{price} ]", bg_color=self.colors.get('accent_rose', '#c47079'), text_color=self.colors.get('text', '#dedcd2'))
             header_layout.addWidget(tag_badge)
 
         user_label = QLabel(username)
-        user_label.setStyleSheet(f"font-weight: bold; font-size: 11px; color: {colors.get('primary', '#b8b39f')};")
+        user_label.setStyleSheet(f"color: {self.colors.get('primary', '#b8b39f')}; font-weight: bold; font-size: 11px;")
         header_layout.addWidget(user_label)
         header_layout.addStretch()
         right_layout.addLayout(header_layout)
@@ -217,20 +233,20 @@ class DanmakuCardWidget(PixelCard):
 
         if msg_type in ("danmaku", "chat"):
             content_label.setText(self.data.get("text", ""))
-            content_label.setStyleSheet(f"font-size: 12px; color: {colors.get('text', '#e8e6df')};")
+            content_label.setStyleSheet(f"color: {self.colors.get('text', '#dedcd2')}; font-size: 12px;")
         elif msg_type == "gift":
             gift_name = self.data.get("gift_name", "礼物")
             num = self.data.get("num", 1)
             price = self.data.get("price", 0)
             content_label.setText(f"赠送 {gift_name} x {num} (电池 {price*10:.0f})")
-            content_label.setStyleSheet(f"font-size: 12px; color: {colors.get('accent_gold', '#c2b88f')}; font-weight: bold;")
+            content_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c4ba97')}; font-size: 12px; font-weight: bold;")
         elif msg_type == "superchat":
             text = self.data.get("text", "")
             content_label.setText(text)
-            content_label.setStyleSheet(f"font-size: 12px; color: {colors.get('text', '#e8e6df')}; font-weight: bold;")
+            content_label.setStyleSheet(f"color: {self.colors.get('text', '#dedcd2')}; font-size: 12px; font-weight: bold;")
         elif msg_type in ("interact", "enter"):
             content_label.setText("进入直播间")
-            content_label.setStyleSheet(f"font-size: 11px; color: {colors.get('text_dim', '#99978f')};")
+            content_label.setStyleSheet(f"color: {self.colors.get('text_dim', '#949289')}; font-size: 11px;")
 
         right_layout.addWidget(content_label)
         main_layout.addLayout(right_layout, 1)

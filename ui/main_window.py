@@ -51,11 +51,11 @@ class MainWindow(QMainWindow):
             qss = get_pixel_qss()
             QApplication.instance().setStyleSheet(qss)
             self.status_bar.showMessage("已自动同步全局 Morandi 壁纸主题配色")
-            self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c2b88f')}; font-weight: bold;")
+            self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c4ba97')}; font-weight: bold;")
             if self.ws_client and self.ws_client.is_running:
-                self.status_badge.set_badge("[ 状态: 已连接 ]", bg_color=self.colors.get('accent_green', '#8a997d'), text_color=self.colors.get('bg_dark', '#1a1a18'))
+                self.status_badge.set_badge("[ 状态: 已连接 ]", bg_color=self.colors.get('accent_green', '#8ea382'), text_color=self.colors.get('bg_dark', '#1c1b18'))
             else:
-                self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2e2d29'), text_color=self.colors.get('text_dim', '#99978f'))
+                self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2a2924'), text_color=self.colors.get('text_dim', '#949289'))
         except Exception as e:
             print(f"[Theme] Reload failed: {e}")
 
@@ -83,9 +83,9 @@ class MainWindow(QMainWindow):
         self.connect_btn = QPushButton("连接直播间")
         self.connect_btn.clicked.connect(self.toggle_connection)
 
-        self.status_badge = PixelBadge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2e2d29'), text_color=self.colors.get('text_dim', '#99978f'))
+        self.status_badge = PixelBadge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2a2924'), text_color=self.colors.get('text_dim', '#949289'))
         self.pop_label = QLabel("人气: 0")
-        self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c2b88f')}; font-weight: bold;")
+        self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c4ba97')}; font-weight: bold;")
 
         top_layout.addWidget(lbl_room)
         top_layout.addWidget(self.room_input)
@@ -111,7 +111,7 @@ class MainWindow(QMainWindow):
         left_layout.setSpacing(6)
 
         feed_title_box = QHBoxLayout()
-        feed_title = QLabel("实时弹幕流")
+        feed_title = QLabel("实时弹幕数据流")
         feed_title.setStyleSheet(f"font-weight: bold; color: {self.colors.get('primary', '#b8b39f')};")
         self.btn_clear = QPushButton("清屏")
         self.btn_clear.clicked.connect(self.clear_feed)
@@ -122,11 +122,12 @@ class MainWindow(QMainWindow):
 
         self.danmaku_scroll = QScrollArea()
         self.danmaku_scroll.setWidgetResizable(True)
-        self.danmaku_scroll.setStyleSheet(f"background-color: {self.colors.get('bg_dark', '#1a1a18')};")
+        self.danmaku_scroll.setStyleSheet("border: none; background: transparent;")
         
         self.danmaku_container = QWidget()
+        self.danmaku_container.setStyleSheet("background: transparent;")
         self.danmaku_layout = QVBoxLayout(self.danmaku_container)
-        self.danmaku_layout.setContentsMargins(4, 4, 4, 4)
+        self.danmaku_layout.setContentsMargins(0, 0, 0, 0)
         self.danmaku_layout.setSpacing(6)
         self.danmaku_layout.addStretch()
         self.danmaku_scroll.setWidget(self.danmaku_container)
@@ -168,13 +169,13 @@ class MainWindow(QMainWindow):
         # Master volume slider
         vol_box = QHBoxLayout()
         lbl_vol_icon = QLabel("音量:")
-        lbl_vol_icon.setStyleSheet(f"color: {self.colors.get('text_dim', '#99978f')};")
+        lbl_vol_icon.setStyleSheet(f"color: {self.colors.get('text_dim', '#949289')};")
         self.slider_quick_vol = QSlider(Qt.Horizontal)
         self.slider_quick_vol.setRange(0, 100)
         self.slider_quick_vol.valueChanged.connect(self.on_quick_vol_changed)
         self.lbl_quick_vol = QLabel("80%")
         self.lbl_quick_vol.setFixedWidth(36)
-        self.lbl_quick_vol.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c2b88f')}; font-weight: bold;")
+        self.lbl_quick_vol.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c4ba97')}; font-weight: bold;")
         vol_box.addWidget(lbl_vol_icon)
         vol_box.addWidget(self.slider_quick_vol)
         vol_box.addWidget(self.lbl_quick_vol)
@@ -182,19 +183,19 @@ class MainWindow(QMainWindow):
 
         # VIP Gift / Superchat feed
         lbl_vip = QLabel("高能榜与醒目留言:")
-        lbl_vip.setStyleSheet(f"font-weight: bold; color: {self.colors.get('accent_gold', '#c2b88f')}; margin-top: 4px;")
+        lbl_vip.setStyleSheet(f"font-weight: bold; color: {self.colors.get('accent_gold', '#c4ba97')}; margin-top: 4px;")
         right_layout.addWidget(lbl_vip)
 
         self.vip_list = QListWidget()
         self.vip_list.setStyleSheet(f"""
             QListWidget {{
-                background-color: {self.colors.get('bg_dark', '#1a1a18')};
-                border: 1px solid {self.colors.get('border_dark', '#121210')};
+                background-color: {self.colors.get('bg_dark', '#1c1b18')};
+                border: 1px solid {self.colors.get('border', '#3d3c34')};
                 padding: 2px;
             }}
             QListWidget::item {{
                 padding: 4px;
-                border-bottom: 1px solid {self.colors.get('border_dark', '#121210')};
+                border-bottom: 1px solid {self.colors.get('border', '#3d3c34')};
             }}
         """)
         right_layout.addWidget(self.vip_list, 1)
@@ -240,7 +241,7 @@ class MainWindow(QMainWindow):
         if self.ws_client and self.ws_client.is_running:
             self.ws_client.stop()
             self.connect_btn.setText("连接直播间")
-            self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2e2d29'), text_color=self.colors.get('text_dim', '#99978f'))
+            self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2a2924'), text_color=self.colors.get('text_dim', '#949289'))
         else:
             room_str = self.room_input.text().strip()
             if not room_str.isdigit() or int(room_str) <= 0:
@@ -250,7 +251,7 @@ class MainWindow(QMainWindow):
             room_id = int(room_str)
             self.config_manager.set("room_id", room_id)
 
-            self.status_badge.set_badge("[ 状态: 连接中... ]", bg_color=self.colors.get('accent_gold', '#c2b88f'), text_color=self.colors.get('bg_dark', '#1a1a18'))
+            self.status_badge.set_badge("[ 状态: 连接中... ]", bg_color=self.colors.get('accent_gold', '#c4ba97'), text_color=self.colors.get('bg_dark', '#1c1b18'))
             self.connect_btn.setText("断开连接")
 
             cookie = self.config_manager.get("bilibili_cookie", "")
@@ -269,14 +270,14 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def on_ws_connected(self, room_id):
-        self.status_badge.set_badge("[ 状态: 已连接 ]", bg_color=self.colors.get('accent_green', '#8a997d'), text_color=self.colors.get('bg_dark', '#1a1a18'))
+        self.status_badge.set_badge("[ 状态: 已连接 ]", bg_color=self.colors.get('accent_green', '#8ea382'), text_color=self.colors.get('bg_dark', '#1c1b18'))
         cookie_tip = " (已登录认证)" if self.config_manager.get("bilibili_cookie", "") else " (游客模式)"
         self.status_bar.showMessage(f"成功连接至 Bilibili 直播间: {room_id}{cookie_tip}")
 
     @Slot(str)
     def on_ws_disconnected(self, reason):
         self.connect_btn.setText("连接直播间")
-        self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('accent_rose', '#ba6670'), text_color=self.colors.get('bg_dark', '#1a1a18'))
+        self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('accent_rose', '#c47079'), text_color=self.colors.get('bg_dark', '#1c1b18'))
         self.status_bar.showMessage(f"直播间连接断开: {reason}")
 
     @Slot(int)
@@ -340,7 +341,7 @@ class MainWindow(QMainWindow):
         data["type"] = "superchat"
         self.append_feed_item(data)
 
-        # Desktop notification
+        # Desktop notification (high priority)
         self.desktop_notifier.send_notification(
             f"醒目留言 [¥{data.get('price')}] - {data.get('user')}",
             data.get("text", ""),
