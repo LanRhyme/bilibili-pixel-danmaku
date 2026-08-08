@@ -1,5 +1,4 @@
 import hashlib
-import logging
 import ssl
 import sys
 import threading
