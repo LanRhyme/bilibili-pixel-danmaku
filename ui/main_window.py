@@ -1,4 +1,8 @@
 import asyncio
+import csv
+import time
+from datetime import datetime
+from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QListWidget, QListWidgetItem, QFrame, QSplitter, QStatusBar,
@@ -29,11 +33,24 @@ class MainWindow(QMainWindow):
         self.tts_loop = None
         self.tts_queue = None
 
+        # Analytics Data
+        self.session_start_time = None
+        self.danmaku_count = 0
+        self.gift_count = 0
+        self.battery_total = 0.0
+        self.sc_total = 0.0
+        self.guard_count = 0
+        self.session_records = []
+
         self.setWindowTitle("Bilibili Pixel Danmaku (莫兰迪像素风弹幕助手)")
-        self.resize(920, 640)
+        self.resize(960, 660)
 
         self.init_ui()
         self.load_config_into_ui()
+
+        # Timer for live duration counter
+        self.live_timer = QTimer(self)
+        self.live_timer.timeout.connect(self.update_live_timer)
 
         # Theme File Watcher
         self.theme_watcher = QFileSystemWatcher(self)
@@ -64,20 +81,24 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
+        main_layout.setSpacing(8)
 
-        # Top Header Card
+        # Top Header Card (Controls + Metrics)
         top_card = PixelCard()
-        top_layout = QHBoxLayout(top_card)
+        top_layout = QVBoxLayout(top_card)
         top_layout.setContentsMargins(10, 8, 10, 8)
-        top_layout.setSpacing(10)
+        top_layout.setSpacing(8)
+
+        # Row 1: Connection & Main Controls
+        r1_layout = QHBoxLayout()
+        r1_layout.setSpacing(10)
 
         lbl_room = QLabel("直播间号:")
         lbl_room.setStyleSheet(f"font-weight: bold; color: {self.colors.get('primary', '#b8b39f')};")
         
         self.room_input = QLineEdit()
         self.room_input.setPlaceholderText("房间号, 如: 544853")
-        self.room_input.setMaximumWidth(150)
+        self.room_input.setMaximumWidth(140)
         self.room_input.returnPressed.connect(self.toggle_connection)
 
         self.connect_btn = QPushButton("连接直播间")
@@ -87,16 +108,39 @@ class MainWindow(QMainWindow):
         self.pop_label = QLabel("人气: 0")
         self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#c4ba97')}; font-weight: bold;")
 
-        top_layout.addWidget(lbl_room)
-        top_layout.addWidget(self.room_input)
-        top_layout.addWidget(self.connect_btn)
-        top_layout.addWidget(self.status_badge)
-        top_layout.addStretch()
-        top_layout.addWidget(self.pop_label)
+        btn_export = QPushButton("[ 导出记录 ]")
+        btn_export.clicked.connect(self.export_session_data)
 
         btn_settings = QPushButton("[ 设置 ]")
         btn_settings.clicked.connect(self.open_settings)
-        top_layout.addWidget(btn_settings)
+
+        r1_layout.addWidget(lbl_room)
+        r1_layout.addWidget(self.room_input)
+        r1_layout.addWidget(self.connect_btn)
+        r1_layout.addWidget(self.status_badge)
+        r1_layout.addStretch()
+        r1_layout.addWidget(self.pop_label)
+        r1_layout.addWidget(btn_export)
+        r1_layout.addWidget(btn_settings)
+        top_layout.addLayout(r1_layout)
+
+        # Row 2: Live Analytics HUD Bar
+        r2_layout = QHBoxLayout()
+        r2_layout.setSpacing(8)
+
+        self.badge_duration = PixelBadge("[ 时长: 00:00:00 ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('text_dim', '#949289'))
+        self.badge_dm_stat = PixelBadge("[ 弹幕: 0 条 ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('text', '#dedcd2'))
+        self.badge_gift_stat = PixelBadge("[ 礼物: 0 (¥0.0) ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('accent_gold', '#c4ba97'))
+        self.badge_sc_stat = PixelBadge("[ SC: ¥0.0 ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('accent_rose', '#c47079'))
+        self.badge_guard_stat = PixelBadge("[ 舰队: 0 舰 ]", bg_color=self.colors.get('bg_dark', '#1c1b18'), text_color=self.colors.get('accent_purple', '#a292ad'))
+
+        r2_layout.addWidget(self.badge_duration)
+        r2_layout.addWidget(self.badge_dm_stat)
+        r2_layout.addWidget(self.badge_gift_stat)
+        r2_layout.addWidget(self.badge_sc_stat)
+        r2_layout.addWidget(self.badge_guard_stat)
+        r2_layout.addStretch()
+        top_layout.addLayout(r2_layout)
 
         main_layout.addWidget(top_card)
 
@@ -232,6 +276,14 @@ class MainWindow(QMainWindow):
         self.lbl_quick_vol.setText(f"{master_vol}%")
         self.sound_manager.set_master_volume(master_vol)
 
+    def update_live_timer(self):
+        if self.session_start_time:
+            elapsed = int(time.time() - self.session_start_time)
+            hrs = elapsed // 3600
+            mins = (elapsed % 3600) // 60
+            secs = elapsed % 60
+            self.badge_duration.set_badge(f"[ 时长: {hrs:02d}:{mins:02d}:{secs:02d} ]")
+
     def on_quick_vol_changed(self, val):
         self.lbl_quick_vol.setText(f"{val}%")
         self.sound_manager.set_master_volume(val)
@@ -240,6 +292,7 @@ class MainWindow(QMainWindow):
     def toggle_connection(self):
         if self.ws_client and self.ws_client.is_running:
             self.ws_client.stop()
+            self.live_timer.stop()
             self.connect_btn.setText("连接直播间")
             self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('bg_card', '#2a2924'), text_color=self.colors.get('text_dim', '#949289'))
         else:
@@ -250,6 +303,9 @@ class MainWindow(QMainWindow):
 
             room_id = int(room_str)
             self.config_manager.set("room_id", room_id)
+
+            self.session_start_time = time.time()
+            self.live_timer.start(1000)
 
             self.status_badge.set_badge("[ 状态: 连接中... ]", bg_color=self.colors.get('accent_gold', '#c4ba97'), text_color=self.colors.get('bg_dark', '#1c1b18'))
             self.connect_btn.setText("断开连接")
@@ -276,6 +332,7 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def on_ws_disconnected(self, reason):
+        self.live_timer.stop()
         self.connect_btn.setText("连接直播间")
         self.status_badge.set_badge("[ 状态: 已断开 ]", bg_color=self.colors.get('accent_rose', '#c47079'), text_color=self.colors.get('bg_dark', '#1c1b18'))
         self.status_bar.showMessage(f"直播间连接断开: {reason}")
@@ -297,12 +354,23 @@ class MainWindow(QMainWindow):
         if self.is_filtered(data.get("text", "")):
             return
 
+        self.danmaku_count += 1
+        self.badge_dm_stat.set_badge(f"[ 弹幕: {self.danmaku_count} 条 ]")
+        self.session_records.append({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "type": "danmaku",
+            "user": data.get("user", ""),
+            "content": data.get("text", ""),
+            "value": ""
+        })
+
         self.append_feed_item(data)
 
-        # Desktop notification
+        # Desktop notification with Avatar
         self.desktop_notifier.send_notification(
             f"{data.get('user', '观众')}",
             data.get("text", ""),
+            avatar_url=data.get("avatar", ""),
             msg_type="danmaku"
         )
 
@@ -315,12 +383,26 @@ class MainWindow(QMainWindow):
     @Slot(dict)
     def on_gift_received(self, data):
         data["type"] = "gift"
+        self.gift_count += 1
+        price = data.get("price", 0)
+        self.battery_total += price
+        self.badge_gift_stat.set_badge(f"[ 礼物: {self.gift_count} (¥{self.battery_total:.1f}) ]")
+
+        self.session_records.append({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "type": "gift",
+            "user": data.get("user", ""),
+            "content": f"{data.get('gift_name')} x {data.get('num')}",
+            "value": f"¥{price}"
+        })
+
         self.append_feed_item(data)
 
-        # Desktop notification
+        # Desktop notification with Avatar
         self.desktop_notifier.send_notification(
             f"收到礼物 - {data.get('user')}",
             f"送出 {data.get('gift_name')} x {data.get('num')}",
+            avatar_url=data.get("avatar", ""),
             msg_type="gift"
         )
 
@@ -339,12 +421,25 @@ class MainWindow(QMainWindow):
     @Slot(dict)
     def on_superchat_received(self, data):
         data["type"] = "superchat"
+        price = data.get("price", 0)
+        self.sc_total += price
+        self.badge_sc_stat.set_badge(f"[ SC: ¥{self.sc_total:.1f} ]")
+
+        self.session_records.append({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "type": "superchat",
+            "user": data.get("user", ""),
+            "content": data.get("text", ""),
+            "value": f"¥{price}"
+        })
+
         self.append_feed_item(data)
 
-        # Desktop notification (high priority)
+        # Desktop notification with Avatar (high priority)
         self.desktop_notifier.send_notification(
             f"醒目留言 [¥{data.get('price')}] - {data.get('user')}",
             data.get("text", ""),
+            avatar_url=data.get("avatar", ""),
             msg_type="superchat"
         )
 
@@ -363,12 +458,24 @@ class MainWindow(QMainWindow):
     @Slot(dict)
     def on_guard_received(self, data):
         data["type"] = "guard"
+        self.guard_count += 1
+        self.badge_guard_stat.set_badge(f"[ 舰队: {self.guard_count} 舰 ]")
+
+        self.session_records.append({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "type": "guard",
+            "user": data.get("user", ""),
+            "content": f"开通 {data.get('gift_name')}",
+            "value": ""
+        })
+
         self.append_feed_item(data)
 
-        # Desktop notification
+        # Desktop notification with Avatar
         self.desktop_notifier.send_notification(
             f"大航海开通 - {data.get('user')}",
             f"开通了 {data.get('gift_name')}",
+            avatar_url=data.get("avatar", ""),
             msg_type="guard"
         )
 
@@ -405,6 +512,28 @@ class MainWindow(QMainWindow):
             if item and item.widget():
                 item.widget().deleteLater()
         self.vip_list.clear()
+
+    def export_session_data(self):
+        if not self.session_records:
+            QMessageBox.information(self, "提示", "当前暂无弹幕记录可导出")
+            return
+
+        export_dir = Path.home() / "Downloads"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        room_id = self.config_manager.get("room_id", 0)
+        export_file = export_dir / f"bilibili_live_{room_id}_{ts}.csv"
+
+        try:
+            with open(export_file, "w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.DictWriter(f, fieldnames=["time", "type", "user", "content", "value"])
+                writer.writeheader()
+                writer.writerows(self.session_records)
+
+            self.status_bar.showMessage(f"成功导出 {len(self.session_records)} 条记录至 {export_file}")
+            QMessageBox.information(self, "导出成功", f"弹幕与礼物明细已保存至:\n{export_file}")
+        except Exception as e:
+            QMessageBox.warning(self, "导出失败", f"导出文件错误: {e}")
 
     def toggle_tts(self):
         enabled = self.btn_toggle_tts.isChecked()
