@@ -35,6 +35,11 @@ DEFAULT_CONFIG = {
         "min_medal_level": 0,
         "min_user_level": 0,
         "blocked_keywords": []
+    },
+    "ui": {
+        "danmaku_font_size": 12,
+        "avatar_size": 32,
+        "vip_font_size": 12
     }
 }
 

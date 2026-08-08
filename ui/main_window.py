@@ -294,6 +294,35 @@ class MainWindow(QMainWindow):
         self.lbl_quick_vol.setText(f"{master_vol}%")
         self.sound_manager.set_master_volume(master_vol)
 
+        self.apply_ui_scale()
+
+    def apply_ui_scale(self):
+        """应用界面显示缩放配置: 弹幕字号/头像/高能榜字号"""
+        dm_font = self.config_manager.get("ui.danmaku_font_size", 12)
+        avatar = self.config_manager.get("ui.avatar_size", 32)
+        vip_font = self.config_manager.get("ui.vip_font_size", 12)
+
+        # 刷新已存在的弹幕卡片
+        for i in range(self.danmaku_layout.count()):
+            item = self.danmaku_layout.itemAt(i)
+            w = item.widget() if item else None
+            if isinstance(w, DanmakuCardWidget):
+                w.set_scale(font_size=dm_font, avatar_size=avatar)
+
+        # 刷新高能榜列表字号
+        self.vip_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {self.colors.get('bg_dark', '#1a1a18')};
+                border: 1px solid {self.colors.get('border', '#64635f')};
+                font-size: {vip_font}px;
+                padding: 2px;
+            }}
+            QListWidget::item {{
+                padding: {max(vip_font - 7, 2)}px 6px;
+                border-bottom: 1px solid {self.colors.get('border', '#64635f')};
+            }}
+        """)
+
     def update_live_timer(self):
         start = self.session_start_time
         if start is not None:
@@ -520,7 +549,9 @@ class MainWindow(QMainWindow):
         self.append_feed_item(data)
 
     def append_feed_item(self, data):
-        card = DanmakuCardWidget(data)
+        dm_font = self.config_manager.get("ui.danmaku_font_size", 12)
+        avatar = self.config_manager.get("ui.avatar_size", 32)
+        card = DanmakuCardWidget(data, font_size=dm_font, avatar_size=avatar)
         count = self.danmaku_layout.count()
         self.danmaku_layout.insertWidget(count - 1, card)
 

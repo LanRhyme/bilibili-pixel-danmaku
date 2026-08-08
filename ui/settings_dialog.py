@@ -167,6 +167,59 @@ class SettingsDialog(QDialog):
         layout_filter.addStretch()
         self.tabs.addTab(tab_filter, "弹幕过滤")
 
+        # Tab 6: UI Display Scale (界面显示)
+        tab_ui = QWidget()
+        layout_ui = QVBoxLayout(tab_ui)
+        layout_ui.setContentsMargins(12, 12, 12, 12)
+        layout_ui.setSpacing(10)
+
+        grp_ui_dm = QGroupBox("弹幕面板")
+        gl_ui_dm = QVBoxLayout(grp_ui_dm)
+        gl_ui_dm.setSpacing(10)
+        gl_ui_dm.addWidget(QLabel("弹幕内容字号:"))
+        self.slider_dm_font = QSlider(Qt.Orientation.Horizontal)
+        self.slider_dm_font.setRange(10, 24)
+        self.slider_dm_font.setValue(12)
+        self.lbl_dm_font = QLabel("12px")
+        self.lbl_dm_font.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-weight: bold;")
+        row_dm_font = QHBoxLayout()
+        row_dm_font.addWidget(self.slider_dm_font)
+        row_dm_font.addWidget(self.lbl_dm_font)
+        gl_ui_dm.addLayout(row_dm_font)
+
+        gl_ui_dm.addWidget(QLabel("头像大小:"))
+        self.slider_avatar = QSlider(Qt.Orientation.Horizontal)
+        self.slider_avatar.setRange(24, 64)
+        self.slider_avatar.setValue(32)
+        self.lbl_avatar = QLabel("32px")
+        self.lbl_avatar.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-weight: bold;")
+        row_avatar = QHBoxLayout()
+        row_avatar.addWidget(self.slider_avatar)
+        row_avatar.addWidget(self.lbl_avatar)
+        gl_ui_dm.addLayout(row_avatar)
+        layout_ui.addWidget(grp_ui_dm)
+
+        grp_ui_vip = QGroupBox("高能榜与醒目留言面板")
+        gl_ui_vip = QVBoxLayout(grp_ui_vip)
+        gl_ui_vip.setSpacing(10)
+        gl_ui_vip.addWidget(QLabel("列表字号:"))
+        self.slider_vip_font = QSlider(Qt.Orientation.Horizontal)
+        self.slider_vip_font.setRange(10, 24)
+        self.slider_vip_font.setValue(12)
+        self.lbl_vip_font = QLabel("12px")
+        self.lbl_vip_font.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-weight: bold;")
+        row_vip_font = QHBoxLayout()
+        row_vip_font.addWidget(self.slider_vip_font)
+        row_vip_font.addWidget(self.lbl_vip_font)
+        gl_ui_vip.addLayout(row_vip_font)
+        layout_ui.addWidget(grp_ui_vip)
+        layout_ui.addStretch()
+
+        self.slider_dm_font.valueChanged.connect(lambda v: self.lbl_dm_font.setText(f"{v}px"))
+        self.slider_avatar.valueChanged.connect(lambda v: self.lbl_avatar.setText(f"{v}px"))
+        self.slider_vip_font.valueChanged.connect(lambda v: self.lbl_vip_font.setText(f"{v}px"))
+        self.tabs.addTab(tab_ui, "界面显示")
+
         main_layout.addWidget(self.tabs)
 
         # Bottom button bar with separator
@@ -219,6 +272,16 @@ class SettingsDialog(QDialog):
         blocked = c.get("filter.blocked_keywords", [])
         self.edit_blocked.setText(", ".join(blocked))
 
+        dm_font = c.get("ui.danmaku_font_size", 12)
+        self.slider_dm_font.setValue(dm_font)
+        self.lbl_dm_font.setText(f"{dm_font}px")
+        avatar = c.get("ui.avatar_size", 32)
+        self.slider_avatar.setValue(avatar)
+        self.lbl_avatar.setText(f"{avatar}px")
+        vip_font = c.get("ui.vip_font_size", 12)
+        self.slider_vip_font.setValue(vip_font)
+        self.lbl_vip_font.setText(f"{vip_font}px")
+
     def save_and_close(self):
         c = self.config_manager
         c.set("bilibili_cookie", self.edit_cookie.text().strip())
@@ -245,5 +308,9 @@ class SettingsDialog(QDialog):
         kw_text = self.edit_blocked.text().strip()
         kws = [k.strip() for k in kw_text.split(",") if k.strip()]
         c.set("filter.blocked_keywords", kws)
+
+        c.set("ui.danmaku_font_size", self.slider_dm_font.value())
+        c.set("ui.avatar_size", self.slider_avatar.value())
+        c.set("ui.vip_font_size", self.slider_vip_font.value())
 
         self.accept()

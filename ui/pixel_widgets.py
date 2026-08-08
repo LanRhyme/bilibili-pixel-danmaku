@@ -66,6 +66,13 @@ class AvatarWidget(QLabel):
         if self.url and self.url not in _AVATAR_PIXMAP_CACHE:
             _GLOBAL_AVATAR_LOADER.load_avatar(self.url, self.username)
 
+    def set_avatar_size(self, size):
+        if size == self.avatar_size:
+            return
+        self.avatar_size = size
+        self.setFixedSize(size, size)
+        self.update_avatar()
+
     def on_avatar_loaded(self, loaded_url, pixmap):
         if loaded_url == self.url:
             self.update_avatar()
@@ -175,13 +182,16 @@ class PixelBadge(QLabel):
             """)
 
 class DanmakuCardWidget(QFrame):
-    def __init__(self, data, parent=None):
+    def __init__(self, data, parent=None, font_size=12, avatar_size=32):
         super().__init__(parent)
         self.setObjectName("danmaku_item_card")
         self.data = data
         self.colors = load_morandi_colors()
+        self.font_size = font_size
+        self.avatar_size = avatar_size
+        self.msg_type = self.data.get("type", "danmaku")
 
-        msg_type = self.data.get("type", "danmaku")
+        msg_type = self.msg_type
         if msg_type == "superchat":
             accent = self.colors.get('accent_rose', '#c47079')
             self.setStyleSheet(f"""
@@ -223,6 +233,29 @@ class DanmakuCardWidget(QFrame):
 
         self.init_ui()
 
+    def set_scale(self, font_size=None, avatar_size=None):
+        """动态调整字号与头像尺寸, 用于设置页保存后即时生效"""
+        if font_size is not None and font_size != self.font_size:
+            self.font_size = font_size
+            self.user_label.setStyleSheet(
+                f"color: {self.colors.get('primary', '#afac9c')}; font-weight: bold; font-size: {font_size + 1}px;"
+            )
+            self._apply_content_style(self.msg_type)
+        if avatar_size is not None and avatar_size != self.avatar_size:
+            self.avatar_size = avatar_size
+            self.avatar_widget.set_avatar_size(avatar_size)
+
+    def _apply_content_style(self, msg_type):
+        fs = self.font_size
+        if msg_type in ("danmaku", "chat"):
+            self.content_label.setStyleSheet(f"color: {self.colors.get('text', '#f2f2f2')}; font-size: {fs}px;")
+        elif msg_type == "gift":
+            self.content_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-size: {fs}px; font-weight: bold;")
+        elif msg_type == "superchat":
+            self.content_label.setStyleSheet(f"color: {self.colors.get('text', '#f2f2f2')}; font-size: {fs}px; font-weight: bold;")
+        elif msg_type in ("interact", "enter"):
+            self.content_label.setStyleSheet(f"color: {self.colors.get('text_dim', '#dededd')}; font-size: {max(fs - 1, 9)}px;")
+
     def init_ui(self):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(8, 6, 8, 6)
@@ -231,8 +264,8 @@ class DanmakuCardWidget(QFrame):
         # Avatar
         avatar_url = self.data.get("avatar", "")
         username = self.data.get("user", "匿名用户")
-        avatar_widget = AvatarWidget(url=avatar_url, username=username, size=32)
-        main_layout.addWidget(avatar_widget, 0, Qt.AlignmentFlag.AlignTop)
+        self.avatar_widget = AvatarWidget(url=avatar_url, username=username, size=self.avatar_size)
+        main_layout.addWidget(self.avatar_widget, 0, Qt.AlignmentFlag.AlignTop)
 
         # Right Column
         right_layout = QVBoxLayout()
@@ -265,32 +298,28 @@ class DanmakuCardWidget(QFrame):
             tag_badge = PixelBadge(f"[ SC ¥{price} ]", bg_color=self.colors.get('accent_rose', '#c47079'), text_color=self.colors.get('text', '#dedcd2'))
             header_layout.addWidget(tag_badge)
 
-        user_label = QLabel(username)
-        user_label.setStyleSheet(f"color: {self.colors.get('primary', '#afac9c')}; font-weight: bold; font-size: 12px;")
-        header_layout.addWidget(user_label)
+        self.user_label = QLabel(username)
+        self.user_label.setStyleSheet(f"color: {self.colors.get('primary', '#afac9c')}; font-weight: bold; font-size: {self.font_size + 1}px;")
+        header_layout.addWidget(self.user_label)
         header_layout.addStretch()
         right_layout.addLayout(header_layout)
 
         # Content Row
-        content_label = QLabel()
-        content_label.setWordWrap(True)
+        self.content_label = QLabel()
+        self.content_label.setWordWrap(True)
 
         if msg_type in ("danmaku", "chat"):
-            content_label.setText(self.data.get("text", ""))
-            content_label.setStyleSheet(f"color: {self.colors.get('text', '#f2f2f2')}; font-size: 12px;")
+            self.content_label.setText(self.data.get("text", ""))
         elif msg_type == "gift":
             gift_name = self.data.get("gift_name", "礼物")
             num = self.data.get("num", 1)
             price = self.data.get("price", 0)
-            content_label.setText(f"赠送 {gift_name} x {num} (电池 {price*10:.0f})")
-            content_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-size: 12px; font-weight: bold;")
+            self.content_label.setText(f"赠送 {gift_name} x {num} (电池 {price*10:.0f})")
         elif msg_type == "superchat":
-            text = self.data.get("text", "")
-            content_label.setText(text)
-            content_label.setStyleSheet(f"color: {self.colors.get('text', '#f2f2f2')}; font-size: 12px; font-weight: bold;")
+            self.content_label.setText(self.data.get("text", ""))
         elif msg_type in ("interact", "enter"):
-            content_label.setText("进入直播间")
-            content_label.setStyleSheet(f"color: {self.colors.get('text_dim', '#dededd')}; font-size: 11px;")
+            self.content_label.setText("进入直播间")
 
-        right_layout.addWidget(content_label)
+        self._apply_content_style(msg_type)
+        right_layout.addWidget(self.content_label)
         main_layout.addLayout(right_layout, 1)
