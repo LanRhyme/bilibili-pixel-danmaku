@@ -12,8 +12,8 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.config_manager = config_manager
         self.colors = load_morandi_colors()
-        self.setWindowTitle("系统设置 - Pixel Danmaku")
-        self.resize(500, 480)
+        self.setWindowTitle("系统设置 - Bilibili Pixel Danmaku")
+        self.resize(560, 520)
         self.init_ui()
         self.load_values()
 
@@ -21,7 +21,45 @@ class SettingsDialog(QDialog):
         main_layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
 
-        # Tab 1: TTS
+        # Tab 1: Cookie & Account
+        tab_account = QWidget()
+        layout_account = QFormLayout(tab_account)
+        layout_account.setSpacing(10)
+
+        lbl_cookie_tip = QLabel("填写 B 站 Cookie（包含 SESSDATA 与 bili_jct）可解除未登录连接限制，保障高频弹幕、SC、舰长 100% 零遗漏：")
+        lbl_cookie_tip.setWordWrap(True)
+        lbl_cookie_tip.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-size: 12px; margin-bottom: 6px;")
+        layout_account.addRow(lbl_cookie_tip)
+
+        self.edit_cookie = QLineEdit()
+        self.edit_cookie.setPlaceholderText("例如: SESSDATA=xxxx; bili_jct=xxxx; buvid3=xxxx")
+        layout_account.addRow("B站 Cookie:", self.edit_cookie)
+        self.tabs.addTab(tab_account, "账号鉴权")
+
+        # Tab 2: Desktop Notifications (桌面通知)
+        tab_notify = QWidget()
+        layout_notify = QFormLayout(tab_notify)
+        layout_notify.setSpacing(10)
+
+        self.cb_notify_enable = QCheckBox("启用 Linux 原生系统桌面通知 (notify-send)")
+        self.cb_notify_dm = QCheckBox("通知普通弹幕")
+        self.cb_notify_gift = QCheckBox("通知高能礼物")
+        self.cb_notify_sc = QCheckBox("通知醒目留言 (SuperChat)")
+        self.cb_notify_guard = QCheckBox("通知大航海 (舰长/提督/总督)")
+
+        self.spin_notify_expire = QSpinBox()
+        self.spin_notify_expire.setRange(1, 30)
+        self.spin_notify_expire.setSuffix(" 秒")
+
+        layout_notify.addRow(self.cb_notify_enable)
+        layout_notify.addRow(self.cb_notify_dm)
+        layout_notify.addRow(self.cb_notify_gift)
+        layout_notify.addRow(self.cb_notify_sc)
+        layout_notify.addRow(self.cb_notify_guard)
+        layout_notify.addRow("通知停留时间:", self.spin_notify_expire)
+        self.tabs.addTab(tab_notify, "桌面通知")
+
+        # Tab 3: TTS
         tab_tts = QWidget()
         layout_tts = QFormLayout(tab_tts)
 
@@ -56,7 +94,7 @@ class SettingsDialog(QDialog):
         layout_tts.addRow("SC播报模板:", self.edit_sc_tmpl)
         self.tabs.addTab(tab_tts, "语音播报")
 
-        # Tab 2: Audio
+        # Tab 4: Audio
         tab_audio = QWidget()
         layout_audio = QFormLayout(tab_audio)
         self.cb_sfx_enable = QCheckBox("启用 8-Bit 复古音效 (送礼/升级/SC)")
@@ -74,26 +112,7 @@ class SettingsDialog(QDialog):
         layout_audio.addRow("主音量:", vol_box)
         self.tabs.addTab(tab_audio, "音效音量")
 
-        # Tab 3: Overlay
-        tab_overlay = QWidget()
-        layout_overlay = QFormLayout(tab_overlay)
-        self.slider_opacity = QSlider(Qt.Horizontal)
-        self.slider_opacity.setRange(10, 100)
-        self.lbl_opacity = QLabel("90%")
-        self.slider_opacity.valueChanged.connect(lambda v: self.lbl_opacity.setText(f"{v}%"))
-
-        op_box = QHBoxLayout()
-        op_box.addWidget(self.slider_opacity)
-        op_box.addWidget(self.lbl_opacity)
-
-        self.spin_max_dm = QSpinBox()
-        self.spin_max_dm.setRange(5, 100)
-
-        layout_overlay.addRow("悬浮窗不透明度:", op_box)
-        layout_overlay.addRow("最大弹幕保留行数:", self.spin_max_dm)
-        self.tabs.addTab(tab_overlay, "悬浮窗")
-
-        # Tab 4: Filter
+        # Tab 5: Filter
         tab_filter = QWidget()
         layout_filter = QFormLayout(tab_filter)
         self.edit_blocked = QLineEdit()
@@ -115,6 +134,15 @@ class SettingsDialog(QDialog):
 
     def load_values(self):
         c = self.config_manager
+        self.edit_cookie.setText(c.get("bilibili_cookie", ""))
+
+        self.cb_notify_enable.setChecked(c.get("notification.enabled", True))
+        self.cb_notify_dm.setChecked(c.get("notification.danmaku", False))
+        self.cb_notify_gift.setChecked(c.get("notification.gifts", True))
+        self.cb_notify_sc.setChecked(c.get("notification.superchat", True))
+        self.cb_notify_guard.setChecked(c.get("notification.guard", True))
+        self.spin_notify_expire.setValue(c.get("notification.expire_ms", 4000) // 1000)
+
         self.cb_tts_enable.setChecked(c.get("tts.enabled", True))
         self.cb_tts_danmaku.setChecked(c.get("tts.read_danmaku", True))
         self.cb_tts_gifts.setChecked(c.get("tts.read_gifts", True))
@@ -133,16 +161,20 @@ class SettingsDialog(QDialog):
         self.slider_vol.setValue(vol)
         self.lbl_vol.setText(f"{vol}%")
 
-        op = c.get("overlay.opacity", 90)
-        self.slider_opacity.setValue(op)
-        self.lbl_opacity.setText(f"{op}%")
-        self.spin_max_dm.setValue(c.get("overlay.max_danmaku", 30))
-
         blocked = c.get("filter.blocked_keywords", [])
         self.edit_blocked.setText(", ".join(blocked))
 
     def save_and_close(self):
         c = self.config_manager
+        c.set("bilibili_cookie", self.edit_cookie.text().strip())
+
+        c.set("notification.enabled", self.cb_notify_enable.isChecked())
+        c.set("notification.danmaku", self.cb_notify_dm.isChecked())
+        c.set("notification.gifts", self.cb_notify_gift.isChecked())
+        c.set("notification.superchat", self.cb_notify_sc.isChecked())
+        c.set("notification.guard", self.cb_notify_guard.isChecked())
+        c.set("notification.expire_ms", self.spin_notify_expire.value() * 1000)
+
         c.set("tts.enabled", self.cb_tts_enable.isChecked())
         c.set("tts.read_danmaku", self.cb_tts_danmaku.isChecked())
         c.set("tts.read_gifts", self.cb_tts_gifts.isChecked())
@@ -154,9 +186,6 @@ class SettingsDialog(QDialog):
 
         c.set("audio.sound_effects_enabled", self.cb_sfx_enable.isChecked())
         c.set("audio.master_volume", self.slider_vol.value())
-
-        c.set("overlay.opacity", self.slider_opacity.value())
-        c.set("overlay.max_danmaku", self.spin_max_dm.value())
 
         kw_text = self.edit_blocked.text().strip()
         kws = [k.strip() for k in kw_text.split(",") if k.strip()]

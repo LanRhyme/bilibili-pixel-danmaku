@@ -5,6 +5,7 @@ CONFIG_PATH = Path.home() / ".config" / "bilibili-pixel-danmaku" / "config.json"
 
 DEFAULT_CONFIG = {
     "room_id": 544853,
+    "bilibili_cookie": "",
     "tts": {
         "enabled": True,
         "voice": "zh-CN-XiaoxiaoNeural",
@@ -22,13 +23,13 @@ DEFAULT_CONFIG = {
         "sound_effects_enabled": True,
         "master_volume": 80
     },
-    "overlay": {
-        "enabled": False,
-        "opacity": 90,
-        "width": 380,
-        "height": 600,
-        "font_size": 14,
-        "max_danmaku": 30
+    "notification": {
+        "enabled": True,
+        "danmaku": False,
+        "gifts": True,
+        "superchat": True,
+        "guard": True,
+        "expire_ms": 4000
     },
     "filter": {
         "min_medal_level": 0,

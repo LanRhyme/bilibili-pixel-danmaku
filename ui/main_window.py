@@ -13,6 +13,8 @@ from ui.overlay_window import DesktopOverlayWindow
 from ui.settings_dialog import SettingsDialog
 from core.theme import get_pixel_qss, MORANDI_APP_COLORS, load_morandi_colors
 
+from core.desktop_notifier import DesktopNotifier
+
 class MainWindow(QMainWindow):
     def __init__(self, config_manager, parent=None):
         super().__init__(parent)
@@ -24,7 +26,7 @@ class MainWindow(QMainWindow):
 
         self.sound_manager = SoundManager(self)
         self.tts_engine = EdgeTTS()
-        self.overlay_window = None
+        self.desktop_notifier = DesktopNotifier(self.config_manager)
 
         self.tts_loop = None
         self.tts_queue = None
@@ -33,7 +35,6 @@ class MainWindow(QMainWindow):
         self.resize(860, 600)
 
         self.init_ui()
-        self.init_overlay()
         self.load_config_into_ui()
 
         # Theme File Watcher
@@ -52,11 +53,11 @@ class MainWindow(QMainWindow):
             qss = get_pixel_qss()
             QApplication.instance().setStyleSheet(qss)
             self.status_bar.showMessage("已自动同步应用 Morandi 主题色彩配置")
-            self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#e0af68')}; font-weight: bold;")
+            self.pop_label.setStyleSheet(f"color: {self.colors.get('accent_gold', '#bdb79a')}; font-weight: bold;")
             if self.ws_client and self.ws_client.is_running:
-                self.status_badge.set_badge("已连接", bg_color=self.colors.get('accent_green', '#9ece6a'), text_color=self.colors.get('bg_dark', '#101018'))
+                self.status_badge.set_badge("已连接", bg_color=self.colors.get('accent_green', '#a8aba0'), text_color=self.colors.get('bg_dark', '#1a1a18'))
             else:
-                self.status_badge.set_badge("已断开", bg_color=self.colors.get('bg_card', '#414868'), text_color=self.colors.get('text', '#c0caf5'))
+                self.status_badge.set_badge("已断开", bg_color=self.colors.get('bg_card', '#383732'), text_color=self.colors.get('text', '#f2f2f2'))
         except Exception as e:
             print(f"[Theme] Reload failed: {e}")
 
@@ -148,18 +149,18 @@ class MainWindow(QMainWindow):
         self.btn_toggle_sfx.clicked.connect(self.toggle_sfx)
         right_layout.addWidget(self.btn_toggle_sfx)
 
-        self.btn_toggle_overlay = QPushButton("桌面悬浮窗: 关")
-        self.btn_toggle_overlay.setCheckable(True)
-        self.btn_toggle_overlay.clicked.connect(self.toggle_overlay)
-        right_layout.addWidget(self.btn_toggle_overlay)
+        self.btn_toggle_notify = QPushButton("桌面通知: 开")
+        self.btn_toggle_notify.setCheckable(True)
+        self.btn_toggle_notify.clicked.connect(self.toggle_notify)
+        right_layout.addWidget(self.btn_toggle_notify)
 
         # VIP Gift / Superchat feed
         lbl_vip = QLabel("高能榜与醒目留言 (SC/Gifts):")
-        lbl_vip.setStyleSheet(f"font-weight: bold; color: {self.colors.get('accent_gold', '#e0af68')}; margin-top: 10px;")
+        lbl_vip.setStyleSheet(f"font-weight: bold; color: {self.colors.get('accent_gold', '#bdb79a')}; margin-top: 10px;")
         right_layout.addWidget(lbl_vip)
 
         self.vip_list = QListWidget()
-        self.vip_list.setStyleSheet(f"background-color: {self.colors.get('bg_dark', '#1a1b26')}; border: 2px solid {self.colors.get('border_dark', '#16161e')};")
+        self.vip_list.setStyleSheet(f"background-color: {self.colors.get('bg_dark', '#1a1a18')}; border: 2px solid {self.colors.get('border_dark', '#16161e')};")
         right_layout.addWidget(self.vip_list, 1)
 
         splitter.addWidget(right_panel)
@@ -173,9 +174,6 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("就绪 - 输入房间号后点击连接即可开启像素直播助手")
 
-    def init_overlay(self):
-        self.overlay_window = DesktopOverlayWindow(self.config_manager)
-
     def load_config_into_ui(self):
         room_id = self.config_manager.get("room_id", 544853)
         self.room_input.setText(str(room_id))
@@ -188,9 +186,9 @@ class MainWindow(QMainWindow):
         self.btn_toggle_sfx.setChecked(sfx_enabled)
         self.btn_toggle_sfx.setText(f"复古音效: {'开' if sfx_enabled else '关'}")
 
-        overlay_enabled = self.config_manager.get("overlay.enabled", False)
-        self.btn_toggle_overlay.setChecked(overlay_enabled)
-        self.btn_toggle_overlay.setText(f"桌面悬浮窗: {'开' if overlay_enabled else '关'}")
+        notify_enabled = self.config_manager.get("notification.enabled", True)
+        self.btn_toggle_notify.setChecked(notify_enabled)
+        self.btn_toggle_notify.setText(f"桌面通知: {'开' if notify_enabled else '关'}")
 
         master_vol = self.config_manager.get("audio.master_volume", 80)
         self.sound_manager.set_master_volume(master_vol)
@@ -199,7 +197,7 @@ class MainWindow(QMainWindow):
         if self.ws_client and self.ws_client.is_running:
             self.ws_client.stop()
             self.connect_btn.setText("连接直播间")
-            self.status_badge.set_badge("已断开", bg_color=self.colors.get('bg_card', '#414868'), text_color=self.colors.get('text', '#c0caf5'))
+            self.status_badge.set_badge("已断开", bg_color=self.colors.get('bg_card', '#383732'), text_color=self.colors.get('text', '#f2f2f2'))
         else:
             room_str = self.room_input.text().strip()
             if not room_str.isdigit() or int(room_str) <= 0:
@@ -209,10 +207,11 @@ class MainWindow(QMainWindow):
             room_id = int(room_str)
             self.config_manager.set("room_id", room_id)
 
-            self.status_badge.set_badge("正在连接...", bg_color=self.colors.get('accent_gold', '#e0af68'), text_color=self.colors.get('bg_dark', '#101018'))
+            self.status_badge.set_badge("正在连接...", bg_color=self.colors.get('accent_gold', '#bdb79a'), text_color=self.colors.get('bg_dark', '#1a1a18'))
             self.connect_btn.setText("断开连接")
 
-            self.ws_client = BilibiliWSClient(room_id)
+            cookie = self.config_manager.get("bilibili_cookie", "")
+            self.ws_client = BilibiliWSClient(room_id, cookie=cookie)
             self.ws_client.connected_signal.connect(self.on_ws_connected)
             self.ws_client.disconnected_signal.connect(self.on_ws_disconnected)
             self.ws_client.danmaku_signal.connect(self.on_danmaku_received)
@@ -227,13 +226,14 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def on_ws_connected(self, room_id):
-        self.status_badge.set_badge("已连接", bg_color=self.colors.get('accent_green', '#9ece6a'), text_color=self.colors.get('bg_dark', '#101018'))
-        self.status_bar.showMessage(f"成功连接至 Bilibili 房间: {room_id}")
+        self.status_badge.set_badge("已连接", bg_color=self.colors.get('accent_green', '#a8aba0'), text_color=self.colors.get('bg_dark', '#1a1a18'))
+        cookie_tip = " (已认证Cookie)" if self.config_manager.get("bilibili_cookie", "") else " (游客模式)"
+        self.status_bar.showMessage(f"成功连接至 Bilibili 房间: {room_id}{cookie_tip}")
 
     @Slot(str)
     def on_ws_disconnected(self, reason):
         self.connect_btn.setText("连接直播间")
-        self.status_badge.set_badge("已断开", bg_color=self.colors.get('accent_rose', '#f7768e'), text_color=self.colors.get('bg_dark', '#101018'))
+        self.status_badge.set_badge("已断开", bg_color=self.colors.get('accent_rose', '#b24355'), text_color=self.colors.get('bg_dark', '#1a1a18'))
         self.status_bar.showMessage(f"直播间连接断开: {reason}")
 
     @Slot(int)
@@ -255,6 +255,14 @@ class MainWindow(QMainWindow):
 
         self.append_feed_item(data)
 
+        # Desktop notification
+        self.desktop_notifier.send_notification(
+            f"💬 {data.get('user', '观众')}",
+            data.get("text", ""),
+            msg_type="danmaku"
+        )
+
+        # TTS speech
         if self.config_manager.get("tts.enabled", True) and self.config_manager.get("tts.read_danmaku", True):
             tmpl = self.config_manager.get("tts.danmaku_template", "{user}说：{msg}")
             speech_text = tmpl.format(user=data.get("user", ""), msg=data.get("text", ""))
@@ -264,6 +272,13 @@ class MainWindow(QMainWindow):
     def on_gift_received(self, data):
         data["type"] = "gift"
         self.append_feed_item(data)
+
+        # Desktop notification
+        self.desktop_notifier.send_notification(
+            f"🎁 收到礼物 - {data.get('user')}",
+            f"送出 {data.get('gift_name')} x {data.get('num')}",
+            msg_type="gift"
+        )
 
         if self.config_manager.get("audio.sound_effects_enabled", True):
             self.sound_manager.play_sfx("coin")
@@ -282,6 +297,13 @@ class MainWindow(QMainWindow):
         data["type"] = "superchat"
         self.append_feed_item(data)
 
+        # Desktop notification (high priority)
+        self.desktop_notifier.send_notification(
+            f"💰 醒目留言 [¥{data.get('price')}] - {data.get('user')}",
+            data.get("text", ""),
+            msg_type="superchat"
+        )
+
         if self.config_manager.get("audio.sound_effects_enabled", True):
             self.sound_manager.play_sfx("alert")
 
@@ -298,6 +320,13 @@ class MainWindow(QMainWindow):
     def on_guard_received(self, data):
         data["type"] = "guard"
         self.append_feed_item(data)
+
+        # Desktop notification
+        self.desktop_notifier.send_notification(
+            f"⚓ 舰队通知 - {data.get('user')}",
+            f"开通了 {data.get('gift_name')}",
+            msg_type="guard"
+        )
 
         if self.config_manager.get("audio.sound_effects_enabled", True):
             self.sound_manager.play_sfx("levelup")
@@ -316,7 +345,7 @@ class MainWindow(QMainWindow):
         count = self.danmaku_layout.count()
         self.danmaku_layout.insertWidget(count - 1, card)
 
-        max_items = self.config_manager.get("overlay.max_danmaku", 30)
+        max_items = 30
         while self.danmaku_layout.count() > max_items + 1:
             item = self.danmaku_layout.takeAt(0)
             if item and item.widget():
@@ -343,14 +372,10 @@ class MainWindow(QMainWindow):
         self.config_manager.set("audio.sound_effects_enabled", enabled)
         self.btn_toggle_sfx.setText(f"复古音效: {'开' if enabled else '关'}")
 
-    def toggle_overlay(self):
-        enabled = self.btn_toggle_overlay.isChecked()
-        self.config_manager.set("overlay.enabled", enabled)
-        self.btn_toggle_overlay.setText(f"桌面悬浮窗: {'开' if enabled else '关'}")
-        if enabled:
-            self.overlay_window.show()
-        else:
-            self.overlay_window.hide()
+    def toggle_notify(self):
+        enabled = self.btn_toggle_notify.isChecked()
+        self.config_manager.set("notification.enabled", enabled)
+        self.btn_toggle_notify.setText(f"桌面通知: {'开' if enabled else '关'}")
 
     def open_settings(self):
         dialog = SettingsDialog(self.config_manager, self)

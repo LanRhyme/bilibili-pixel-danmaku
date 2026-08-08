@@ -22,18 +22,32 @@ class BilibiliWSClient(QObject):
     interact_signal = Signal(dict)
     popularity_signal = Signal(int)
 
-    def __init__(self, room_id=0, parent=None):
+    def __init__(self, room_id=0, cookie="", parent=None):
         super().__init__(parent)
         self.room_id = int(room_id)
         self.real_room_id = int(room_id)
+        self.cookie = cookie.strip()
+        self.user_uid = 0
+        self.buvid = ""
         self.is_running = False
         self.session = None
         self.ws = None
         self.avatar_cache = {}
-        from core.web_server import WebOverlayServer
-        self.web_server = WebOverlayServer()
 
     async def get_room_info(self):
+        # 1. If cookie provided, get login user info & buvid
+        if self.cookie:
+            try:
+                nav_url = "https://api.bilibili.com/x/web-interface/nav"
+                async with self.session.get(nav_url) as resp:
+                    if resp.status == 200:
+                        nav_data = await resp.json()
+                        if nav_data.get("code") == 0:
+                            self.user_uid = nav_data["data"].get("mid", 0)
+            except Exception as e:
+                print(f"[WS] Nav error: {e}")
+
+        # 2. Get real room ID
         url = f"https://api.live.bilibili.com/room/v1/Room/room_init?id={self.room_id}"
         async with self.session.get(url) as resp:
             data = await resp.json()
@@ -42,13 +56,27 @@ class BilibiliWSClient(QObject):
             else:
                 self.real_room_id = self.room_id
 
-        danmu_info_url = f"https://api.live.bilibili.com/room/v1/Danmu/getConf?room_id={self.real_room_id}&platform=pc&player=web"
-        async with self.session.get(danmu_info_url) as resp:
+        # 3. Get danmu server info & token (xlive API for authenticated stream)
+        danmu_info_url = f"https://api.live.bilibili.com/xlive/web-room/v1/dM/getDanmuInfo?id={self.real_room_id}&type=0"
+        try:
+            async with self.session.get(danmu_info_url) as resp:
+                data = await resp.json()
+                if data.get("code") == 0:
+                    host_list = data["data"]["host_list"]
+                    token = data["data"]["token"]
+                    return host_list[0]["host"], host_list[0]["wss_port"], token
+        except Exception:
+            pass
+
+        # Fallback to v1 API
+        fallback_url = f"https://api.live.bilibili.com/room/v1/Danmu/getConf?room_id={self.real_room_id}&platform=pc&player=web"
+        async with self.session.get(fallback_url) as resp:
             data = await resp.json()
             if data.get("code") == 0:
                 host_list = data["data"]["host_server_list"]
                 token = data["data"]["token"]
                 return host_list[0]["host"], host_list[0]["wss_port"], token
+
         return "broadcastlv.chat.bilibili.com", 443, ""
 
     def make_packet(self, opcode, payload=""):
@@ -62,12 +90,14 @@ class BilibiliWSClient(QObject):
 
     async def start_async(self):
         self.is_running = True
-        await self.web_server.start()
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Referer": "https://live.bilibili.com/"
+                "Referer": f"https://live.bilibili.com/{self.room_id}"
             }
+            if self.cookie:
+                headers["Cookie"] = self.cookie
+
             async with aiohttp.ClientSession(headers=headers) as session:
                 self.session = session
                 host, port, token = await self.get_room_info()
@@ -76,7 +106,7 @@ class BilibiliWSClient(QObject):
                 async with session.ws_connect(ws_url) as ws:
                     self.ws = ws
                     auth_body = json.dumps({
-                        "uid": 0,
+                        "uid": self.user_uid,
                         "roomid": self.real_room_id,
                         "protover": 3,
                         "platform": "web",
